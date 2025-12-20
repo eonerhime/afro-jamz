@@ -118,6 +118,7 @@ function initializeDatabase() {
 }
 
 // Routes
+// Register user
 app.post('/api/auth/register', async (req, res) => {
   const { email, password, displayName, role } = req.body;
 
@@ -150,6 +151,7 @@ app.post('/api/auth/register', async (req, res) => {
   }
 });
 
+// Login user
 app.post('/api/auth/login', (req, res) => {
   const { email, password } = req.body;
 
@@ -239,6 +241,61 @@ app.get('/api/purchases', authenticateToken, (req, res) => {
     }
   );
 });
+
+// Update a beat
+app.put('/api/beats/:id', authenticateToken, (req, res) => {
+  console.log('UPDATE HIT:', req.params.id);
+
+  if (req.user.role !== 'producer') {
+    return res.status(403).json({ error: 'Only producers can update beats' });
+  }
+
+  const beatId = Number(req.params.id);
+  const { title, genre, tempo, duration, previewUrl, fullUrl } = req.body;
+
+  db.get('SELECT * FROM beats WHERE id = ?', [beatId], (err, beat) => {
+    if (err) return res.status(500).json({ error: err.message });
+    if (!beat) return res.status(404).json({ error: 'Beat not found' });
+
+    if (Number(beat.producer_id) !== Number(req.user.id)) {
+      return res.status(403).json({ error: 'Not your beat' });
+    }
+
+    db.run(
+      `UPDATE beats
+       SET title = ?, genre = ?, tempo = ?, duration = ?, preview_url = ?, full_url = ?
+       WHERE id = ?`,
+      [title, genre, tempo, duration, previewUrl, fullUrl, beatId],
+      function (err) {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json({ message: 'Beat updated successfully' });
+      }
+    );
+  });
+});
+
+// Delete a beat
+app.delete('/api/beats/:id', authenticateToken, (req, res) => {
+  if (req.user.role !== 'producer') {
+    return res.status(403).json({ error: 'Only producers can delete beats' });
+  }
+
+  const beatId = Number(req.params.id);
+
+  db.get('SELECT * FROM beats WHERE id = ?', [beatId], (err, beat) => {
+    if (!beat) return res.status(404).json({ error: 'Beat not found' });
+
+    if (Number(beat.producer_id) !== Number(req.user.id)) {
+      return res.status(403).json({ error: 'Not your beat' });
+    }
+
+    db.run('DELETE FROM beats WHERE id = ?', [beatId], () => {
+      res.json({ message: 'Beat deleted successfully' });
+    });
+  });
+});
+
+
 
 // Start server
 app.listen(PORT, () => {
