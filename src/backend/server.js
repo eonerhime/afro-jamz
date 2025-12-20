@@ -1,29 +1,42 @@
-const express = require('express');
-const cors = require('cors');
-const helmet = require('helmet');
-const morgan = require('morgan');
-const sqlite3 = require('sqlite3').verbose();
-const bcrypt = require('bcryptjs');
-const jwt = require('jsonwebtoken');
+import express from 'express';
+import cors from 'cors';
+import helmet from 'helmet';
+import morgan from 'morgan';
+import sqlite3 from 'sqlite3';
+import bcrypt from 'bcryptjs';
+import jwt from 'jsonwebtoken';
+import path from 'path';
+
+import { authenticateToken } from './middleware/auth.middleware.js';
+import { JWT_SECRET } from './config/env.js';
+
+
+const sqlite = sqlite3.verbose();
 
 const app = express();
 const PORT = process.env.PORT || 3001;
 
+
 // Middleware
-app.use(helmet());
-app.use(cors());
-app.use(morgan('combined'));
 app.use(express.json());
+app.use(cors());
+app.use(helmet());
+app.use(morgan('combined'));
 
 // Database setup
-const db = new sqlite3.Database('./db/sqlite.db', (err) => {
+const dbPath = path.join(path.resolve(), 'src', 'backend', 'db', 'sqlite.db');
+console.log("DB Path", dbPath);
+
+const db = new sqlite.Database(dbPath, (err) => {
   if (err) {
     console.error('Error opening database:', err.message);
   } else {
-    console.log('Connected to SQLite database.');
+    console.log('Connected to SQLite database.', dbPath);
     initializeDatabase();
   }
 });
+
+console.log(db);
 
 // Initialize database tables
 function initializeDatabase() {
@@ -104,20 +117,6 @@ function initializeDatabase() {
   });
 }
 
-// Authentication middleware
-const authenticateToken = (req, res, next) => {
-  const authHeader = req.headers['authorization'];
-  const token = authHeader && authHeader.split(' ')[1];
-
-  if (!token) return res.sendStatus(401);
-
-  jwt.verify(token, 'your-secret-key', (err, user) => {
-    if (err) return res.sendStatus(403);
-    req.user = user;
-    next();
-  });
-};
-
 // Routes
 app.post('/api/auth/register', async (req, res) => {
   const { email, password, displayName, role } = req.body;
@@ -137,10 +136,11 @@ app.post('/api/auth/register', async (req, res) => {
       [email, hashedPassword, displayName, role],
       function(err) {
         if (err) {
+          console.error('REGISTER ERROR:', err.message);
           if (err.code === 'SQLITE_CONSTRAINT_UNIQUE') {
             return res.status(409).json({ error: 'Email already exists' });
           }
-          return res.status(500).json({ error: 'Database error' });
+          return res.status(500).json({ error: err.message });
         }
         res.status(201).json({ id: this.lastID, message: 'User created successfully' });
       }
@@ -158,14 +158,18 @@ app.post('/api/auth/login', (req, res) => {
   }
 
   db.get('SELECT * FROM users WHERE email = ?', [email], async (err, user) => {
-    if (err) return res.status(500).json({ error: 'Database error' });
+    if (err) {
+      console.error('LOGIN ERROR:', err.message);
+      return res.status(500).json({ error: err.message });
+    }
+
     if (!user) return res.status(401).json({ error: 'Invalid credentials' });
 
     const isValidPassword = await bcrypt.compare(password, user.password_hash);
     if (!isValidPassword) return res.status(401).json({ error: 'Invalid credentials' });
 
-    const token = jwt.sign({ id: user.id, email: user.email, role: user.role }, 'your-secret-key');
-    res.json({ token, user: { id: user.id, email: user.email, displayName: user.displayName, role: user.role } });
+    const token = jwt.sign({ id: user.id, email: user.email, role: user.role }, JWT_SECRET);
+    res.json({ token, user: { id: user.id, email: user.email, displayName: user.display_name, role: user.role } });
   });
 });
 
@@ -252,3 +256,4 @@ process.on('SIGINT', () => {
     process.exit(0);
   });
 });
+
