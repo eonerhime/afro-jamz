@@ -66,3 +66,53 @@ This plan describes how the system is built, structured, and scaled, while remai
 - SQLite may be used for development
 - Production deployment should support a scalable relational database
 - Stores users, beats, licenses, purchases, promotions, earnings, referrals, and payme
+
+## MVP Execution Strategy
+
+### MVP Definition
+...
+
+### Phase 1 — Core Marketplace
+Goal: Deliver a functional, mobile-ready beat marketplace with secure payments.
+
+Included capabilities:
+- Producer account registration and authentication
+- Buyer account registration and authentication
+- Public browsing and searching of beats without requiring an account
+- Beat upload by producers with:
+- Metadata (title, genre, tempo, duration)
+- Preview audio playback
+- One or more licensing options with defined prices and usage rights
+- Mandatory license selection before checkout
+- Secure payment processing for beat purchases
+- Automatic platform commission deduction per sale
+- Buyer access to purchased beats only after successful payment
+- Producer dashboard showing uploaded beats and earnings breakdown
+- Clear separation of producer-facing and buyer-facing user flows
+- Responsive, mobile-first user interface 
+
+### Phase 2 — Monetization & Growth
+Goal: Expand revenue opportunities and platform visibility.
+
+Included capabilities:
+- Promote Beat feature allowing producers to pay for:
+- Sponsored placement on the landing page
+- Sponsored listings in beat search results
+- Support for multiple payment providers (e.g. Stripe, PayPal)
+- Producer payment methods for promotions
+- Referral earnings system
+- Beat sharing via public links to social platforms
+ 
+
+### Explicit Non-MVP Features
+The following features are intentionally excluded from the MVP and must not delay initial launch:
+
+- Native mobile applications (iOS or Android)
+- Offline playback or downloads
+- In-app messaging between users
+- AI-powered recommendations
+- Subscription-based pricing models
+- Advanced analytics and reporting
+- Notifications (email or push) 
+
+"Any feature not explicitly listed in Phase 1 is considered out of MVP scope and must not block release."
