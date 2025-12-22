@@ -175,6 +175,115 @@ app.post('/api/auth/login', (req, res) => {
   });
 });
 
+// Create beat license (Producer only)
+app.post(
+  '/api/beats/:beatId/licenses',
+  authenticateToken,
+  (req, res) => {
+    if (req.user.role !== 'producer') {
+      return res.status(403).json({ error: 'Only producers can create licenses' });
+    }
+
+    const beatId = Number(req.params.beatId);
+    const { name, description, price, usageRights } = req.body;
+
+    if (!name || !price) {
+      return res.status(400).json({ error: 'Name and price are required' });
+    }
+
+    // Verify beat ownership
+    db.get(
+      'SELECT * FROM beats WHERE id = ?',
+      [beatId],
+      (err, beat) => {
+        if (!beat) return res.status(404).json({ error: 'Beat not found' });
+
+        if (beat.producer_id !== req.user.id) {
+          return res.status(403).json({ error: 'Not your beat' });
+        }
+
+        db.run(
+          `INSERT INTO licenses 
+           (beat_id, name, description, price, usage_rights)
+           VALUES (?, ?, ?, ?, ?)`,
+          [beatId, name, description, price, usageRights],
+          function () {
+            res.status(201).json({
+              id: this.lastID,
+              message: 'License created successfully'
+            });
+          }
+        );
+      }
+    );
+  }
+);
+
+// Get Licenses for a Beat (Public)
+app.get('/api/beats/:beatId/licenses', (req, res) => {
+  const beatId = Number(req.params.beatId);
+
+  db.all(
+    'SELECT * FROM licenses WHERE beat_id = ?',
+    [beatId],
+    (err, rows) => {
+      if (err) return res.status(500).json({ error: 'Database error' });
+      res.json(rows);
+    }
+  );
+});
+
+// Update a license (Producer only)
+app.put('/api/licenses/:id', authenticateToken, (req, res) => {
+  if (req.user.role !== 'producer') {
+    return res.status(403).json({ error: 'Only producers can edit licenses' });
+  }
+
+  const licenseId = Number(req.params.id);
+  const { name, description, price, usageRights } = req.body;
+
+  // Step 1: Load license + beat
+  db.get(
+    `SELECT l.*, b.producer_id 
+     FROM licenses l
+     JOIN beats b ON l.beat_id = b.id
+     WHERE l.id = ?`,
+    [licenseId],
+    (err, license) => {
+      if (!license) return res.status(404).json({ error: 'License not found' });
+
+      // Step 2: Ownership check
+      if (license.producer_id !== req.user.id) {
+        return res.status(403).json({ error: 'Not your license' });
+      }
+
+      // Step 3: Check purchases
+      db.get(
+        'SELECT id FROM purchases WHERE license_id = ? LIMIT 1',
+        [licenseId],
+        (err, purchase) => {
+          if (purchase) {
+            return res.status(400).json({
+              error: 'License cannot be edited after it has been purchased'
+            });
+          }
+
+          // Step 4: Update
+          db.run(
+            `UPDATE licenses
+             SET name = ?, description = ?, price = ?, usage_rights = ?
+             WHERE id = ?`,
+            [name, description, price, usageRights, licenseId],
+            () => {
+              res.json({ message: 'License updated successfully' });
+            }
+          );
+        }
+      );
+    }
+  );
+});
+
 // Get beats (public)
 app.get('/api/beats', (req, res) => {
   const { search, genre, tempo, producer } = req.query;
@@ -295,7 +404,55 @@ app.delete('/api/beats/:id', authenticateToken, (req, res) => {
   });
 });
 
+// Purchase a beat
+app.post('/api/purchases', authenticateToken, (req, res) => {
+  if (req.user.role !== 'buyer') {
+    return res.status(403).json({ error: 'Only buyers can purchase beats' });
+  }
 
+  const { beatId, licenseId } = req.body;
+
+  if (!beatId || !licenseId) {
+    return res.status(400).json({ error: 'beatId and licenseId are required' });
+  }
+
+  // Load license + beat
+  db.get(
+    `SELECT l.price, b.producer_id
+     FROM licenses l
+     JOIN beats b ON l.beat_id = b.id
+     WHERE l.id = ? AND b.id = ?`,
+    [licenseId, beatId],
+    (err, record) => {
+      if (!record) {
+        return res.status(404).json({ error: 'Beat or license not found' });
+      }
+
+      // Prevent self-purchase
+      if (record.producer_id === req.user.id) {
+        return res.status(400).json({ error: 'Cannot purchase your own beat' });
+      }
+
+      const price = record.price;
+      const commission = price * 0.15;
+
+      db.run(
+        `INSERT INTO purchases
+         (buyer_id, beat_id, license_id, price, commission)
+         VALUES (?, ?, ?, ?, ?)`,
+        [req.user.id, beatId, licenseId, price, commission],
+        function () {
+          res.status(201).json({
+            id: this.lastID,
+            price,
+            commission,
+            message: 'Purchase completed successfully'
+          });
+        }
+      );
+    }
+  );
+});
 
 // Start server
 app.listen(PORT, () => {
