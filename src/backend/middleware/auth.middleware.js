@@ -30,3 +30,22 @@ export function authenticateToken(req, res, next) {
   });
 }
 
+// Optional Auth
+export function optionalAuth(req, res, next) {
+  const header = req.headers.authorization;
+
+  if (!header) {
+    req.user = null;
+    return next();
+  }
+
+  try {
+    const token = header.split(' ')[1];
+    const decoded = jwt.verify(token, SECRET_KEY);
+    req.user = decoded;
+    next();
+  } catch {
+    req.user = null;
+    next();
+  }
+}

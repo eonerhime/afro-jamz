@@ -1,20 +1,22 @@
-import express from 'express';
-import cors from 'cors';
-import helmet from 'helmet';
-import morgan from 'morgan';
-import sqlite3 from 'sqlite3';
 import bcrypt from 'bcryptjs';
+import cors from 'cors';
+import express from 'express';
+import fs from 'fs';
+import helmet from 'helmet';
 import jwt from 'jsonwebtoken';
+import morgan from 'morgan';
 import path from 'path';
-
-import { authenticateToken } from './middleware/auth.middleware.js';
+import sqlite3 from 'sqlite3';
+import { fileURLToPath } from 'url';
 import { JWT_SECRET } from './config/env.js';
+import { authenticateToken } from './middleware/auth.middleware.js';
 
 
 const sqlite = sqlite3.verbose();
-
 const app = express();
 const PORT = process.env.PORT || 3001;
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 
 // Middleware
@@ -117,7 +119,35 @@ function initializeDatabase() {
   });
 }
 
-// Routes
+const authenticateOptional = (req, res, next) => {
+  const header = req.headers.authorization;
+
+  if (!header) {
+    req.user = null;
+    return next();
+  }
+
+  try {
+    const token = header.split(' ')[1];
+    const decoded = jwt.verify(token, JWT_SECRET);
+    req.user = decoded;
+  } catch {
+    req.user = null;
+  }
+
+  next();
+};
+
+// Generate download token
+function generateDownloadToken(userId, beatId) {
+  return jwt.sign(
+    { userId, beatId, type: 'download' },
+    JWT_SECRET,
+    { expiresIn: '5m' } // ⏱️ expires in 5 minutes
+  );
+}
+
+// ROUTES
 // Register user
 app.post('/api/auth/register', async (req, res) => {
   const { email, password, displayName, role } = req.body;
@@ -175,10 +205,59 @@ app.post('/api/auth/login', (req, res) => {
   });
 });
 
+// =====================
+// Beats (Public)
+// =====================
+// Get Licenses for a Beat (Public)
+app.get('/api/beats/:beatId/licenses', (req, res) => {
+  const beatId = Number(req.params.beatId);
+
+  db.all(
+    'SELECT * FROM licenses WHERE beat_id = ?',
+    [beatId],
+    (err, rows) => {
+      if (err) return res.status(500).json({ error: 'Database error' });
+      res.json(rows);
+    }
+  );
+});
+
+// Get beats (public)
+app.get('/api/beats', (req, res) => {
+  const { search, genre, tempo, producer } = req.query;
+  let query = 'SELECT b.*, u.display_name as producer_name FROM beats b JOIN users u ON b.producer_id = u.id WHERE 1=1';
+  const params = [];
+
+  if (search) {
+    query += ' AND b.title LIKE ?';
+    params.push(`%${search}%`);
+  }
+  if (genre) {
+    query += ' AND b.genre = ?';
+    params.push(genre);
+  }
+  if (tempo) {
+    query += ' AND b.tempo = ?';
+    params.push(tempo);
+  }
+  if (producer) {
+    query += ' AND u.display_name LIKE ?';
+    params.push(`%${producer}%`);
+  }
+
+  db.all(query, params, (err, rows) => {
+    if (err) return res.status(500).json({ error: 'Database error' });
+    res.json(rows);
+  });
+});
+
+// ----- Protected routes ----- //
+
+// =====================
+// Beats (Producer)
+// =====================
 // Create beat license (Producer only)
-app.post(
-  '/api/beats/:beatId/licenses',
-  authenticateToken,
+app.post('/api/beats/:beatId/licenses', authenticateToken,
   (req, res) => {
     if (req.user.role !== 'producer') {
       return res.status(403).json({ error: 'Only producers can create licenses' });
@@ -218,20 +297,6 @@ app.post(
     );
   }
 );
-
-// Get Licenses for a Beat (Public)
-app.get('/api/beats/:beatId/licenses', (req, res) => {
-  const beatId = Number(req.params.beatId);
-
-  db.all(
-    'SELECT * FROM licenses WHERE beat_id = ?',
-    [beatId],
-    (err, rows) => {
-      if (err) return res.status(500).json({ error: 'Database error' });
-      res.json(rows);
-    }
-  );
-});
 
 // Update a license (Producer only)
 app.put('/api/licenses/:id', authenticateToken, (req, res) => {
@@ -284,35 +349,6 @@ app.put('/api/licenses/:id', authenticateToken, (req, res) => {
   );
 });
 
-// Get beats (public)
-app.get('/api/beats', (req, res) => {
-  const { search, genre, tempo, producer } = req.query;
-  let query = 'SELECT b.*, u.display_name as producer_name FROM beats b JOIN users u ON b.producer_id = u.id WHERE 1=1';
-  const params = [];
-
-  if (search) {
-    query += ' AND b.title LIKE ?';
-    params.push(`%${search}%`);
-  }
-  if (genre) {
-    query += ' AND b.genre = ?';
-    params.push(genre);
-  }
-  if (tempo) {
-    query += ' AND b.tempo = ?';
-    params.push(tempo);
-  }
-  if (producer) {
-    query += ' AND u.display_name LIKE ?';
-    params.push(`%${producer}%`);
-  }
-
-  db.all(query, params, (err, rows) => {
-    if (err) return res.status(500).json({ error: 'Database error' });
-    res.json(rows);
-  });
-});
-
 // Upload beat (producers only)
 app.post('/api/beats', authenticateToken, (req, res) => {
   if (req.user.role !== 'producer') {
@@ -331,22 +367,6 @@ app.post('/api/beats', authenticateToken, (req, res) => {
     function(err) {
       if (err) return res.status(500).json({ error: 'Database error' });
       res.status(201).json({ id: this.lastID, message: 'Beat uploaded successfully' });
-    }
-  );
-});
-
-// Get user purchases (authenticated)
-app.get('/api/purchases', authenticateToken, (req, res) => {
-  db.all(
-    `SELECT p.*, b.title, l.name as license_name, l.usage_rights
-     FROM purchases p
-     JOIN beats b ON p.beat_id = b.id
-     JOIN licenses l ON p.license_id = l.id
-     WHERE p.buyer_id = ?`,
-    [req.user.id],
-    (err, rows) => {
-      if (err) return res.status(500).json({ error: 'Database error' });
-      res.json(rows);
     }
   );
 });
@@ -404,6 +424,121 @@ app.delete('/api/beats/:id', authenticateToken, (req, res) => {
   });
 });
 
+// =====================
+// Beats (Access-controlled)
+// =====================
+// Get single beat (access-controlled)
+app.get('/api/beats/:id', authenticateOptional, async (req, res) => {
+  const beatId = req.params.id;
+  const user = req.user || null;
+
+  db.get(
+    `
+    SELECT b.*, u.display_name AS producer_name
+    FROM beats b
+    JOIN users u ON b.producer_id = u.id
+    WHERE b.id = ?
+    `,
+    [beatId],
+    async (err, beat) => {
+      if (err) return res.status(500).json({ error: 'Database error' });
+      if (!beat) return res.status(404).json({ error: 'Beat not found' });
+
+      let canAccessFull = false;
+
+      if (user) {
+        if (user.role === 'producer' && user.id === beat.producer_id) {
+          canAccessFull = true;
+        } else {
+          db.get(
+            `SELECT 1 FROM purchases WHERE buyer_id = ? AND beat_id = ?`,
+            [user.id, beatId],
+            (err, row) => {
+              if (row) canAccessFull = true;
+              respond();
+            }
+          );
+          return;
+        }
+      }
+
+      respond();
+
+      function respond() {
+        res.json({
+          id: beat.id,
+          title: beat.title,
+          genre: beat.genre,
+          tempo: beat.tempo,
+          duration: beat.duration,
+          preview_url: beat.preview_url,
+          full_url: canAccessFull ? beat.full_url : null,
+          producer_name: beat.producer_name,
+          access: canAccessFull ? 'full' : 'preview'
+        });
+      }
+    }
+  );
+});
+
+// ================================
+// SECURE STREAM / DOWNLOAD ROUTE
+// ================================
+app.get('/api/beats/:id/download', authenticateToken, (req, res) => {
+  const beatId = req.params.id;
+  const userId = req.user.id;
+
+  // 1️⃣ Verify purchase
+  db.get(
+    `SELECT * FROM purchases WHERE buyer_id = ? AND beat_id = ?`,
+    [userId, beatId],
+    (err, purchase) => {
+      if (err) return res.status(500).json({ error: 'Database error' });
+      if (!purchase) return res.status(403).json({ error: 'Access denied' });
+
+      // 2️⃣ Get beat info
+      db.get(
+        `SELECT full_url FROM beats WHERE id = ?`,
+        [beatId],
+        (err, beat) => {
+          if (err) return res.status(500).json({ error: 'Database error' });
+          if (!beat) return res.status(404).json({ error: 'Beat not found' });
+
+          // 3️⃣ Absolute audio path
+          const audioPath = path.join(
+            __dirname,
+            'audio',
+            beat.full_url
+          );
+
+          if (!fs.existsSync(audioPath)) {
+            return res.status(404).json({ error: 'Audio file not found' });
+          }
+
+          // 4️⃣ FORCE DOWNLOAD
+          res.download(audioPath, beat.full_url);
+        }
+      );
+    }
+  );
+});
+
+// Get user purchases (authenticated)
+app.get('/api/purchases', authenticateToken, (req, res) => {
+  db.all(
+    `SELECT p.*, b.title, l.name as license_name, l.usage_rights
+     FROM purchases p
+     JOIN beats b ON p.beat_id = b.id
+     JOIN licenses l ON p.license_id = l.id
+     WHERE p.buyer_id = ?`,
+    [req.user.id],
+    (err, rows) => {
+      if (err) return res.status(500).json({ error: 'Database error' });
+      res.json(rows);
+    }
+  );
+});
+
 // Purchase a beat
 app.post('/api/purchases', authenticateToken, (req, res) => {
   if (req.user.role !== 'buyer') {
@@ -452,6 +587,63 @@ app.post('/api/purchases', authenticateToken, (req, res) => {
       );
     }
   );
+});
+
+// Generate secure download URL (buyers only)
+app.get('/api/beats/:id/secure-url', authenticateToken, (req, res) => {
+  const beatId = req.params.id;
+  const userId = req.user.id;
+
+  db.get(
+    `SELECT 1 FROM purchases WHERE buyer_id = ? AND beat_id = ?`,
+    [userId, beatId],
+    (err, purchase) => {
+      if (err) return res.status(500).json({ error: 'Database error' });
+      if (!purchase)
+        return res.status(403).json({ error: 'You have not purchased this beat' });
+
+      const token = generateDownloadToken(userId, beatId);
+
+      res.json({
+        downloadUrl: `/api/beats/${beatId}/download?token=${token}`,
+        expiresIn: '5 minutes'
+      });
+    }
+  );
+});
+
+// Download / stream beat securely
+app.get('/api/beats/:id/download', (req, res) => {
+  const { token } = req.query;
+  const beatId = req.params.id;
+
+  if (!token) {
+    return res.status(401).json({ error: 'Missing token' });
+  }
+
+  jwt.verify(token, JWT_SECRET, (err, decoded) => {
+    if (err) {
+      return res.status(403).json({ error: 'Invalid or expired token' });
+    }
+
+    if (decoded.beatId !== Number(beatId)) {
+      return res.status(403).json({ error: 'Token mismatch' });
+    }
+
+    db.get(
+      `SELECT full_url FROM beats WHERE id = ?`,
+      [beatId],
+      (err, beat) => {
+        if (err || !beat)
+          return res.status(404).json({ error: 'Beat not found' });
+
+        // 🔐 OPTION A: Redirect to protected file store
+        return res.redirect(beat.full_url);
+
+        // 🔐 OPTION B (later): stream from disk or S3
+      }
+    );
+  });
 });
 
 // Start server
