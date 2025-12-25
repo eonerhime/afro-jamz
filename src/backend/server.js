@@ -646,6 +646,132 @@ app.get('/api/beats/:id/download', (req, res) => {
   });
 });
 
+// ================================
+// PRODUCER SALES
+// ================================
+// Sales Dashboard
+app.get('/api/sales', authenticateToken, (req, res) => {
+  const producerId = req.user.id;
+
+  // 1️⃣ Ensure user is a producer
+  if (req.user.role !== 'producer') {
+    return res.status(403).json({ error: 'Producers only' });
+  }
+
+  // 2️⃣ Fetch sales for producer’s beats
+  const query = `
+    SELECT
+      p.id AS purchase_id,
+      b.id AS beat_id,
+      b.title AS beat_title,
+      u.email AS buyer_email,
+      l.name AS license_name,
+      l.price,
+      p.commission,
+      p.created_at AS purchased_at
+    FROM purchases p
+    JOIN beats b ON p.beat_id = b.id
+    JOIN users u ON p.buyer_id = u.id
+    JOIN licenses l ON p.license_id = l.id
+    WHERE b.producer_id = ?
+    ORDER BY p.created_at DESC
+  `;
+
+  db.all('SELECT * FROM purchases', [], (err, rows) => {
+    if (err) {
+      console.error('PURCHASES QUERY ERROR:', err.message);
+      return res.status(500).json({ error: 'Database error' });
+    }
+    res.json(rows);
+  });
+
+});
+
+// Sales Summary
+app.get('/api/sales/summary', authenticateToken, (req, res) => {
+  if (req.user.role !== 'producer') {
+    return res.status(403).json({ error: 'Forbidden' });
+  }
+
+  const producerId = req.user.id;
+
+  db.get(
+    `
+    SELECT 
+      COUNT(p.id) AS total_sales,
+      COALESCE(SUM(p.price), 0) AS gross_revenue,
+      COALESCE(SUM(p.commission), 0) AS total_commission,
+      COALESCE(SUM(p.price - p.commission), 0) AS net_earnings
+    FROM purchases p
+    JOIN beats b ON p.beat_id = b.id
+    WHERE b.producer_id = ?
+    `,
+    [producerId],
+    (err, row) => {
+      if (err) return res.status(500).json({ error: 'Database error' });
+      res.json(row);
+    }
+  );
+});
+
+// Producers Payout List Route
+app.get('/api/producers/payouts', authenticateToken, (req, res) => {
+  if (req.user.role !== 'producer') {
+    return res.status(403).json({ error: 'Access denied' });
+  }
+
+  const producerId = req.user.id;
+
+  const query = `
+    SELECT 
+      p.id AS purchase_id,
+      b.title AS beat_title,
+      p.price,
+      p.commission,
+      (p.price - p.commission) AS payout_amount,
+      p.payout_status,
+      p.purchased_at
+    FROM purchases p
+    JOIN beats b ON p.beat_id = b.id
+    WHERE b.producer_id = ?
+  `;
+
+  db.all(query, [producerId], (err, rows) => {
+    if (err) {
+      console.error(err);
+      return res.status(500).json({ error: 'Database error' });
+    }
+
+    res.json(rows);
+  });
+});
+
+// Mark payout as paid (Admin / System)
+app.put('/api/admin/payouts/:purchaseId/pay', authenticateToken, (req, res) => {
+  // For now, allow only producers or admin logic
+  const purchaseId = req.params.purchaseId;
+
+  const query = `
+    UPDATE purchases
+    SET payout_status = 'paid',
+        paid_at = CURRENT_TIMESTAMP
+    WHERE id = ?
+  `;
+
+  db.run(query, [purchaseId], function (err) {
+    if (err) {
+      console.error(err);
+      return res.status(500).json({ error: 'Database error' });
+    }
+
+    if (this.changes === 0) {
+      return res.status(404).json({ error: 'Purchase not found' });
+    }
+
+    res.json({ message: 'Payout marked as paid' });
+  });
+});
+
 // Start server
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
