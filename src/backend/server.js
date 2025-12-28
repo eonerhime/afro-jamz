@@ -650,53 +650,11 @@ app.get('/api/beats/:id/secure-url', authenticateToken, (req, res) => {
   );
 });
 
-// Download / stream beat securely
-app.get('/api/beats/:id/download', (req, res) => {
-  const { token } = req.query;
-  const beatId = req.params.id;
-
-  if (!token) {
-    return res.status(401).json({ error: 'Missing token' });
-  }
-
-  jwt.verify(token, JWT_SECRET, (err, decoded) => {
-    if (err) {
-      return res.status(403).json({ error: 'Invalid or expired token' });
-    }
-
-    if (decoded.beatId !== Number(beatId)) {
-      return res.status(403).json({ error: 'Token mismatch' });
-    }
-
-    db.get(
-      `SELECT full_url FROM beats WHERE id = ?`,
-      [beatId],
-      (err, beat) => {
-        if (err || !beat)
-          return res.status(404).json({ error: 'Beat not found' });
-
-        // 🔐 OPTION A: Redirect to protected file store
-        return res.redirect(beat.full_url);
-
-        // 🔐 OPTION B (later): stream from disk or S3
-      }
-    );
-  });
-});
-
 // ================================
 // PRODUCER ROUTES
 // ================================
 // Sales Dashboard
-app.get('/api/sales', authenticateToken, (req, res) => {
-  const producerId = req.user.id;
-
-  // 1️⃣ Ensure user is a producer
-  if (req.user.role !== 'producer') {
-    return res.status(403).json({ error: 'Producers only' });
-  }
-
-  // 2️⃣ Fetch sales for producer’s beats
+app.get('/api/sales', authenticateToken, requireAdmin, (req, res) => {
   const query = `
     SELECT
       p.id AS purchase_id,
@@ -726,30 +684,23 @@ app.get('/api/sales', authenticateToken, (req, res) => {
 });
 
 // Sales Summary
-app.get('/api/sales/summary', authenticateToken, (req, res) => {
-  if (req.user.role !== 'producer') {
-    return res.status(403).json({ error: 'Forbidden' });
-  }
-
-  const producerId = req.user.id;
-
-  db.get(
-    `
+app.get('/api/sales/summary', authenticateToken, requireAdmin, (req, res) => {
+  const query = `
     SELECT 
       COUNT(p.id) AS total_sales,
       COALESCE(SUM(p.price), 0) AS gross_revenue,
       COALESCE(SUM(p.commission), 0) AS total_commission,
       COALESCE(SUM(p.price - p.commission), 0) AS net_earnings
     FROM purchases p
-    JOIN beats b ON p.beat_id = b.id
-    WHERE b.producer_id = ?
-    `,
-    [producerId],
-    (err, row) => {
-      if (err) return res.status(500).json({ error: 'Database error' });
-      res.json(row);
+  `;
+
+  db.get(query, [], (err, row) => {
+    if (err) {
+      console.error('SALES SUMMARY ERROR:', err.message);
+      return res.status(500).json({ error: 'Database error' });
     }
-  );
+    res.json(row);
+  });
 });
 
 // Producer Dashboard Route
@@ -809,72 +760,68 @@ app.post('/api/producer/payouts/request', authenticateToken, (req, res) => {
 // Producer requests withdrawal
 app.post('/api/producer/withdrawals', authenticateToken, (req, res) => {
   const producerId = req.user.id;
-  let { amount } = req.body;
+  const { amount } = req.body;
 
-  // 1️⃣ Calculate total pending payouts
-  const query = `
+  // 1️⃣ Calculate pending earnings
+  const pendingQuery = `
     SELECT 
-      COALESCE(SUM(p.price - p.commission), 0) AS pending_total
+      COALESCE(SUM(p.price - p.commission), 0) AS pending_amount
     FROM purchases p
     JOIN beats b ON p.beat_id = b.id
     WHERE b.producer_id = ?
       AND p.payout_status = 'pending'
   `;
 
-  db.get(query, [producerId], (err, row) => {
-    if (err) return res.status(500).json({ error: 'Database error' });
-
-    const pendingTotal = row.pending_total;
-
-    if (pendingTotal <= 0) {
-      return res.status(400).json({ error: 'No pending payouts available' });
+  db.get(pendingQuery, [producerId], (err, row) => {
+    if (err) {
+      console.error(err);
+      return res.status(500).json({ error: 'Database error' });
     }
 
-    // 2️⃣ Cap withdrawal amount to pendingTotal
-    if (amount > pendingTotal) {
-      amount = pendingTotal;
+    const pendingAmount = row.pending_amount;
+
+    // 2️⃣ Validate withdrawal
+    if (pendingAmount <= 0) {
+      return res.status(400).json({ error: 'No pending earnings available' });
     }
 
-    // 3️⃣ Insert withdrawal request
-    const insertQuery = `
+    if (amount > pendingAmount) {
+      return res.status(400).json({
+        error: 'Requested amount exceeds pending earnings',
+        pendingAmount
+      });
+    }
+
+    // 3️⃣ Create withdrawal request
+    db.run(
+      `
       INSERT INTO withdrawals (producer_id, amount, status)
       VALUES (?, ?, 'pending')
-    `;
-    db.run(insertQuery, [producerId, amount], function(err) {
-      if (err) return res.status(500).json({ error: 'Database error' });
-
-      // 4️⃣ Mark the corresponding purchases as 'in withdrawal'
-      const updatePurchases = `
-        UPDATE purchases
-        SET payout_status = 'in_withdrawal'
-        WHERE payout_status = 'pending'
-          AND beat_id IN (
-            SELECT id FROM beats WHERE producer_id = ?
-          )
-      `;
-      db.run(updatePurchases, [producerId], function(err) {
-        if (err) console.error('Failed to update purchases', err);
-        // Not fatal
-      });
-
-      res.json({
-        message: 'Withdrawal request submitted',
-        withdrawal: {
-          id: this.lastID,
-          producer_id: producerId,
-          amount: pendingAmount,
-          status: 'pending',
-          requested_at: new Date().toISOString()
+      `,
+      [producerId, amount],
+      function (err) {
+        if (err) {
+          console.error(err);
+          return res.status(500).json({ error: 'Database error' });
         }
-      });
 
-    });
+        res.json({
+          message: 'Withdrawal request submitted',
+          withdrawal: {
+            id: this.lastID,
+            producer_id: producerId,
+            amount,
+            status: 'pending'
+          }
+        });
+      }
+    );
   });
 });
 
 
-// Producers Payout List Route
-app.get('/api/producers/payouts', authenticateToken, (req, res) => {
+// Producer Payout List Route
+app.get('/api/producer/payouts', authenticateToken, (req, res) => {
   if (req.user.role !== 'producer') {
     return res.status(403).json({ error: 'Access denied' });
   }
@@ -960,32 +907,6 @@ app.put('/api/admin/beats/:id/status', authenticateToken, requireAdmin, (req, re
   );
 });
 
-// Mark payout as paid (Admin / System)
-app.put('/api/admin/payouts/:purchaseId/pay', authenticateToken, (req, res) => {
-  // For now, allow only producers or admin logic
-  const purchaseId = req.params.purchaseId;
-
-  const query = `
-    UPDATE purchases
-    SET payout_status = 'paid',
-        paid_at = CURRENT_TIMESTAMP
-    WHERE id = ?
-  `;
-
-  db.run(query, [purchaseId], function (err) {
-    if (err) {
-      console.error(err);
-      return res.status(500).json({ error: 'Database error' });
-    }
-
-    if (this.changes === 0) {
-      return res.status(404).json({ error: 'Purchase not found' });
-    }
-
-    res.json({ message: 'Payout marked as paid' });
-  });
-});
-
 // GET admin payouts (pending OR all)
 app.get('/api/admin/payouts', authenticateToken, requireAdmin, (req, res) => {
   const { status } = req.query; // optional: pending | approved
@@ -1012,31 +933,78 @@ app.get('/api/admin/payouts', authenticateToken, requireAdmin, (req, res) => {
 });
 
 // Admin approves payout
-app.put('/api/admin/payouts/:id/approve', authenticateToken, requireAdmin, (req, res) => {
-  const payoutId = req.params.id;
+// app.put('/api/admin/payouts/:id/approve', authenticateToken, requireAdmin, (req, res) => {
+//   const payoutId = req.params.id;
 
-  db.run(
-    `
-    UPDATE purchases
-    SET payout_status = 'approved',
-        paid_at = CURRENT_TIMESTAMP
-    WHERE id = ?
-    `,
-    [payoutId],
-    function (err) {
-      if (err) {
-        console.error(err);
-        return res.status(500).json({ error: 'Database error' });
-      }
+//   db.run(
+//     `
+//     UPDATE purchases
+//     SET payout_status = 'approved',
+//         paid_at = CURRENT_TIMESTAMP
+//     WHERE id = ?
+//     `,
+//     [payoutId],
+//     function (err) {
+//       if (err) {
+//         console.error(err);
+//         return res.status(500).json({ error: 'Database error' });
+//       }
 
-      if (this.changes === 0) {
-        return res.status(404).json({ error: 'Payout not found' });
-      }
+//       if (this.changes === 0) {
+//         return res.status(404).json({ error: 'Payout not found' });
+//       }
 
-      res.json({ message: 'Payout approved' });
-    }
-  );
-});
+//       res.json({ message: 'Payout approved' });
+//     }
+//   );
+// });
+
+// Admin rejects a producer withdrawal request
+// app.put('/api/admin/payouts/:id/reject', authenticateToken, requireAdmin, (req, res) => {
+//     const withdrawalId = req.params.id;
+//     const { reason } = req.body; // optional reason for rejection
+
+//     // 1️⃣ Check if withdrawal exists and is pending
+//     db.get(
+//       `SELECT * FROM withdrawals WHERE id = ?`,
+//       [withdrawalId],
+//       (err, withdrawal) => {
+//         if (err) {
+//           console.error('DB ERROR:', err.message);
+//           return res.status(500).json({ error: 'Database error' });
+//         }
+
+//         if (!withdrawal) {
+//           return res.status(404).json({ error: 'Withdrawal not found' });
+//         }
+
+//         if (withdrawal.status !== 'pending') {
+//           return res
+//             .status(400)
+//             .json({ error: `Cannot reject a withdrawal with status '${withdrawal.status}'` });
+//         }
+
+//         // 2️⃣ Update status to rejected
+//         db.run(
+//           `UPDATE withdrawals SET status = 'rejected', reason = ? WHERE id = ?`,
+//           [reason || null, withdrawalId],
+//           function (err) {
+//             if (err) {
+//               console.error('DB ERROR:', err.message);
+//               return res.status(500).json({ error: 'Database error' });
+//             }
+
+//             res.json({
+//               message: 'Withdrawal rejected',
+//               withdrawal_id: withdrawalId,
+//               reason: reason || null
+//             });
+//           }
+//         );
+//       }
+//     );
+//   }
+// );
 
 // Admin views withdrawal requests
 app.get('/api/admin/withdrawals', authenticateToken, requireAdmin, (req, res) => {
@@ -1053,14 +1021,98 @@ app.get('/api/admin/withdrawals', authenticateToken, requireAdmin, (req, res) =>
   );
 });
 
-// Admin approves withdrawal (money sent)
+// Admin approves a producer withdrawal
 app.put('/api/admin/withdrawals/:id/approve', authenticateToken, requireAdmin, (req, res) => {
   const withdrawalId = req.params.id;
 
+  // 1️⃣ Get withdrawal details
+  db.get(
+    `SELECT id, producer_id, amount, status
+     FROM withdrawals
+     WHERE id = ?`,
+    [withdrawalId],
+    (err, withdrawal) => {
+      if (err) return res.status(500).json({ error: 'Database error' });
+      if (!withdrawal) return res.status(404).json({ error: 'Withdrawal not found' });
+      if (withdrawal.status !== 'pending') {
+        return res.status(400).json({ error: 'Withdrawal already processed' });
+      }
+
+      // 2️⃣ Update withdrawal status to 'approved'
+      db.run(
+        `UPDATE withdrawals
+         SET status = 'approved', processed_at = CURRENT_TIMESTAMP
+         WHERE id = ?`,
+        [withdrawalId],
+        function(err) {
+          if (err) return res.status(500).json({ error: 'Failed to update withdrawal' });
+
+          // 3️⃣ Fetch pending purchases for this producer
+          db.all(
+            `SELECT id, price - commission AS net
+             FROM purchases
+             WHERE payout_status = 'pending'
+               AND beat_id IN (
+                 SELECT id FROM beats WHERE producer_id = ?
+               )
+             ORDER BY purchased_at ASC`,
+            [withdrawal.producer_id],
+            (err, purchases) => {
+              if (err) return res.status(500).json({ error: 'Database error fetching purchases' });
+
+              let remaining = withdrawal.amount;
+              const toUpdateIds = [];
+
+              for (const p of purchases) {
+                if (remaining <= 0) break;
+                toUpdateIds.push(p.id);
+                remaining -= p.net;
+              }
+
+              if (toUpdateIds.length === 0) {
+                return res.json({
+                  message: 'Withdrawal approved but no pending purchases to pay',
+                  withdrawal_id: withdrawalId,
+                  purchases_updated: 0
+                });
+              }
+
+              const placeholders = toUpdateIds.map(() => '?').join(',');
+
+              // 4️⃣ Update purchases as paid
+              db.run(
+                `UPDATE purchases
+                 SET payout_status = 'paid', paid_at = CURRENT_TIMESTAMP
+                 WHERE id IN (${placeholders})`,
+                toUpdateIds,
+                function(err) {
+                  if (err) return res.status(500).json({ error: 'Failed to update purchases' });
+
+                  res.json({
+                    message: 'Withdrawal approved and purchases paid',
+                    withdrawal_id: withdrawalId,
+                    purchases_updated: this.changes
+                  });
+                }
+              );
+            }
+          );
+        }
+      );
+    }
+  );
+});
+
+// Admin rejects withdrawal
+app.put('/api/admin/withdrawals/:id/reject', authenticateToken, requireAdmin, (req, res) => {
+  const withdrawalId = req.params.id;
+
   db.run(
-    `UPDATE withdrawals
-     SET status = 'paid', processed_at = CURRENT_TIMESTAMP
-     WHERE id = ? AND status = 'pending'`,
+    `
+    UPDATE withdrawals
+    SET status = 'rejected', processed_at = CURRENT_TIMESTAMP
+    WHERE id = ? AND status = 'pending'
+    `,
     [withdrawalId],
     function (err) {
       if (err) return res.status(500).json({ error: 'Database error' });
@@ -1069,7 +1121,7 @@ app.put('/api/admin/withdrawals/:id/approve', authenticateToken, requireAdmin, (
         return res.status(404).json({ error: 'Withdrawal not found or already processed' });
       }
 
-      res.json({ message: 'Withdrawal paid successfully' });
+      res.json({ message: 'Withdrawal rejected' });
     }
   );
 });
