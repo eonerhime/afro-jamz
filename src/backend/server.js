@@ -11,6 +11,7 @@ import { fileURLToPath } from 'url';
 import { JWT_SECRET } from './config/env.js';
 import { requireAdmin } from './middleware/admin.middleware.js';
 import { authenticateToken } from './middleware/auth.middleware.js';
+import { requireProducer } from './middleware/producer.middleware.js';
 
 
 const sqlite = sqlite3.verbose();
@@ -228,7 +229,7 @@ app.get('/api/beats/:beatId/licenses', (req, res) => {
   );
 });
 
-// Get beats (PUBLIC – only enabled beats)
+// Get beats (PUBLIC – only enabled beats) with licenses included
 app.get('/api/beats', (req, res) => {
   const { search, genre, tempo, producer } = req.query;
 
@@ -241,7 +242,6 @@ app.get('/api/beats', (req, res) => {
     WHERE b.is_active = 1
       AND b.status = 'enabled'
   `;
-
   const params = [];
 
   if (search) {
@@ -264,12 +264,28 @@ app.get('/api/beats', (req, res) => {
     params.push(`%${producer}%`);
   }
 
-  db.all(query, params, (err, rows) => {
+  db.all(query, params, (err, beats) => {
     if (err) {
       console.error(err);
       return res.status(500).json({ error: 'Database error' });
     }
-    res.json(rows);
+
+    if (beats.length === 0) return res.json([]);
+
+    const beatIds = beats.map(b => b.id);
+    const placeholders = beatIds.map(() => '?').join(',');
+    const licensesQuery = `SELECT * FROM licenses WHERE beat_id IN (${placeholders})`;
+
+    db.all(licensesQuery, beatIds, (err, licenses) => {
+      if (err) return res.status(500).json({ error: 'Database error' });
+
+      const beatsWithLicenses = beats.map(b => ({
+        ...b,
+        licenses: licenses.filter(l => l.beat_id === b.id)
+      }));
+
+      res.json(beatsWithLicenses);
+    });
   });
 });
 
@@ -669,7 +685,7 @@ app.get('/api/beats/:id/download', (req, res) => {
 });
 
 // ================================
-// PRODUCER SALES
+// PRODUCER ROUTES
 // ================================
 // Sales Dashboard
 app.get('/api/sales', authenticateToken, (req, res) => {
@@ -736,6 +752,127 @@ app.get('/api/sales/summary', authenticateToken, (req, res) => {
   );
 });
 
+// Producer Dashboard Route
+app.get('/api/producer/dashboard', authenticateToken, requireProducer, (req, res) => {
+    const producerId = req.user.id;
+
+    const query = `
+      SELECT
+        COUNT(p.id) AS total_sales,
+        COALESCE(SUM(p.price), 0) AS gross_revenue,
+        COALESCE(SUM(p.commission), 0) AS total_commission,
+        COALESCE(SUM(p.price - p.commission), 0) AS total_earnings,
+        COALESCE(SUM(
+          CASE WHEN p.payout_status = 'approved'
+          THEN p.price - p.commission ELSE 0 END
+        ), 0) AS paid_out,
+        COALESCE(SUM(
+          CASE WHEN p.payout_status = 'pending'
+          THEN p.price - p.commission ELSE 0 END
+        ), 0) AS pending_payouts
+      FROM purchases p
+      JOIN beats b ON p.beat_id = b.id
+      WHERE b.producer_id = ?
+    `;
+
+    db.get(query, [producerId], (err, stats) => {
+      if (err) {
+        console.error(err);
+        return res.status(500).json({ error: 'Database error' });
+      }
+      res.json(stats);
+    });
+  }
+);
+
+// Producer's payout request
+app.post('/api/producer/payouts/request', authenticateToken, (req, res) => {
+    if (req.user.role !== 'producer')
+      return res.status(403).json({ error: 'Only producers allowed' });
+
+    db.run(
+      `UPDATE purchases
+       SET payout_status = 'requested'
+       WHERE payout_status = 'pending'
+       AND beat_id IN (
+         SELECT id FROM beats WHERE producer_id = ?
+       )`,
+      [req.user.id],
+      function (err) {
+        if (err) return res.status(500).json({ error: 'Database error' });
+        res.json({ message: 'Payout request submitted' });
+      }
+    );
+  }
+);
+
+// Producer requests withdrawal
+app.post('/api/producer/withdrawals', authenticateToken, (req, res) => {
+  const producerId = req.user.id;
+  let { amount } = req.body;
+
+  // 1️⃣ Calculate total pending payouts
+  const query = `
+    SELECT 
+      COALESCE(SUM(p.price - p.commission), 0) AS pending_total
+    FROM purchases p
+    JOIN beats b ON p.beat_id = b.id
+    WHERE b.producer_id = ?
+      AND p.payout_status = 'pending'
+  `;
+
+  db.get(query, [producerId], (err, row) => {
+    if (err) return res.status(500).json({ error: 'Database error' });
+
+    const pendingTotal = row.pending_total;
+
+    if (pendingTotal <= 0) {
+      return res.status(400).json({ error: 'No pending payouts available' });
+    }
+
+    // 2️⃣ Cap withdrawal amount to pendingTotal
+    if (amount > pendingTotal) {
+      amount = pendingTotal;
+    }
+
+    // 3️⃣ Insert withdrawal request
+    const insertQuery = `
+      INSERT INTO withdrawals (producer_id, amount, status)
+      VALUES (?, ?, 'pending')
+    `;
+    db.run(insertQuery, [producerId, amount], function(err) {
+      if (err) return res.status(500).json({ error: 'Database error' });
+
+      // 4️⃣ Mark the corresponding purchases as 'in withdrawal'
+      const updatePurchases = `
+        UPDATE purchases
+        SET payout_status = 'in_withdrawal'
+        WHERE payout_status = 'pending'
+          AND beat_id IN (
+            SELECT id FROM beats WHERE producer_id = ?
+          )
+      `;
+      db.run(updatePurchases, [producerId], function(err) {
+        if (err) console.error('Failed to update purchases', err);
+        // Not fatal
+      });
+
+      res.json({
+        message: 'Withdrawal request submitted',
+        withdrawal: {
+          id: this.lastID,
+          producer_id: producerId,
+          amount: pendingAmount,
+          status: 'pending',
+          requested_at: new Date().toISOString()
+        }
+      });
+
+    });
+  });
+});
+
+
 // Producers Payout List Route
 app.get('/api/producers/payouts', authenticateToken, (req, res) => {
   if (req.user.role !== 'producer') {
@@ -765,32 +902,6 @@ app.get('/api/producers/payouts', authenticateToken, (req, res) => {
     }
 
     res.json(rows);
-  });
-});
-
-// Mark payout as paid (Admin / System)
-app.put('/api/admin/payouts/:purchaseId/pay', authenticateToken, (req, res) => {
-  // For now, allow only producers or admin logic
-  const purchaseId = req.params.purchaseId;
-
-  const query = `
-    UPDATE purchases
-    SET payout_status = 'paid',
-        paid_at = CURRENT_TIMESTAMP
-    WHERE id = ?
-  `;
-
-  db.run(query, [purchaseId], function (err) {
-    if (err) {
-      console.error(err);
-      return res.status(500).json({ error: 'Database error' });
-    }
-
-    if (this.changes === 0) {
-      return res.status(404).json({ error: 'Purchase not found' });
-    }
-
-    res.json({ message: 'Payout marked as paid' });
   });
 });
 
@@ -849,6 +960,32 @@ app.put('/api/admin/beats/:id/status', authenticateToken, requireAdmin, (req, re
   );
 });
 
+// Mark payout as paid (Admin / System)
+app.put('/api/admin/payouts/:purchaseId/pay', authenticateToken, (req, res) => {
+  // For now, allow only producers or admin logic
+  const purchaseId = req.params.purchaseId;
+
+  const query = `
+    UPDATE purchases
+    SET payout_status = 'paid',
+        paid_at = CURRENT_TIMESTAMP
+    WHERE id = ?
+  `;
+
+  db.run(query, [purchaseId], function (err) {
+    if (err) {
+      console.error(err);
+      return res.status(500).json({ error: 'Database error' });
+    }
+
+    if (this.changes === 0) {
+      return res.status(404).json({ error: 'Purchase not found' });
+    }
+
+    res.json({ message: 'Payout marked as paid' });
+  });
+});
+
 // GET admin payouts (pending OR all)
 app.get('/api/admin/payouts', authenticateToken, requireAdmin, (req, res) => {
   const { status } = req.query; // optional: pending | approved
@@ -873,28 +1010,6 @@ app.get('/api/admin/payouts', authenticateToken, requireAdmin, (req, res) => {
     res.json(rows);
   });
 });
-
-
-// Producer's payout request
-app.post('/api/producer/payouts/request', authenticateToken, (req, res) => {
-    if (req.user.role !== 'producer')
-      return res.status(403).json({ error: 'Only producers allowed' });
-
-    db.run(
-      `UPDATE purchases
-       SET payout_status = 'requested'
-       WHERE payout_status = 'pending'
-       AND beat_id IN (
-         SELECT id FROM beats WHERE producer_id = ?
-       )`,
-      [req.user.id],
-      function (err) {
-        if (err) return res.status(500).json({ error: 'Database error' });
-        res.json({ message: 'Payout request submitted' });
-      }
-    );
-  }
-);
 
 // Admin approves payout
 app.put('/api/admin/payouts/:id/approve', authenticateToken, requireAdmin, (req, res) => {
@@ -921,52 +1036,6 @@ app.put('/api/admin/payouts/:id/approve', authenticateToken, requireAdmin, (req,
       res.json({ message: 'Payout approved' });
     }
   );
-});
-
-// Producer requests withdrawal
-app.post('/api/producer/withdrawals', authenticateToken, (req, res) => {
-  if (req.user.role !== 'producer') {
-    return res.status(403).json({ error: 'Only producers can request withdrawals' });
-  }
-
-  const producerId = req.user.id;
-
-  // 1️⃣ Calculate available balance
-  const earningsQuery = `
-    SELECT 
-      SUM(price - commission) AS balance
-    FROM purchases
-    WHERE payout_status = 'approved'
-      AND beat_id IN (
-        SELECT id FROM beats WHERE producer_id = ?
-      )
-  `;
-
-  db.get(earningsQuery, [producerId], (err, row) => {
-    if (err) return res.status(500).json({ error: 'Database error' });
-
-    const balance = row.balance || 0;
-
-    if (balance <= 0) {
-      return res.status(400).json({ error: 'No available balance to withdraw' });
-    }
-
-    // 2️⃣ Create withdrawal request
-    db.run(
-      `INSERT INTO withdrawals (producer_id, amount)
-       VALUES (?, ?)`,
-      [producerId, balance],
-      function (err) {
-        if (err) return res.status(500).json({ error: 'Database error' });
-
-        res.status(201).json({
-          message: 'Withdrawal request submitted',
-          withdrawal_id: this.lastID,
-          amount: balance
-        });
-      }
-    );
-  });
 });
 
 // Admin views withdrawal requests
