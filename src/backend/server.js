@@ -9,6 +9,7 @@ import path from 'path';
 import sqlite3 from 'sqlite3';
 import { fileURLToPath } from 'url';
 import { JWT_SECRET } from './config/env.js';
+import { requireAdmin } from './middleware/admin.middleware.js';
 import { authenticateToken } from './middleware/auth.middleware.js';
 
 
@@ -200,7 +201,12 @@ app.post('/api/auth/login', (req, res) => {
     const isValidPassword = await bcrypt.compare(password, user.password_hash);
     if (!isValidPassword) return res.status(401).json({ error: 'Invalid credentials' });
 
-    const token = jwt.sign({ id: user.id, email: user.email, role: user.role }, JWT_SECRET);
+    const token = jwt.sign({ 
+      id: user.id, 
+      email: user.email, 
+      role: user.role, 
+      is_admin: user.is_admin }, 
+      JWT_SECRET);
     res.json({ token, user: { id: user.id, email: user.email, displayName: user.display_name, role: user.role } });
   });
 });
@@ -222,31 +228,47 @@ app.get('/api/beats/:beatId/licenses', (req, res) => {
   );
 });
 
-// Get beats (public)
+// Get beats (PUBLIC – only enabled beats)
 app.get('/api/beats', (req, res) => {
   const { search, genre, tempo, producer } = req.query;
-  let query = 'SELECT b.*, u.display_name as producer_name FROM beats b JOIN users u ON b.producer_id = u.id WHERE 1=1';
+
+  let query = `
+    SELECT 
+      b.*, 
+      u.display_name AS producer_name
+    FROM beats b
+    JOIN users u ON b.producer_id = u.id
+    WHERE b.is_active = 1
+      AND b.status = 'enabled'
+  `;
+
   const params = [];
 
   if (search) {
     query += ' AND b.title LIKE ?';
     params.push(`%${search}%`);
   }
+
   if (genre) {
     query += ' AND b.genre = ?';
     params.push(genre);
   }
+
   if (tempo) {
     query += ' AND b.tempo = ?';
     params.push(tempo);
   }
+
   if (producer) {
     query += ' AND u.display_name LIKE ?';
     params.push(`%${producer}%`);
   }
 
   db.all(query, params, (err, rows) => {
-    if (err) return res.status(500).json({ error: 'Database error' });
+    if (err) {
+      console.error(err);
+      return res.status(500).json({ error: 'Database error' });
+    }
     res.json(rows);
   });
 });
@@ -769,6 +791,249 @@ app.put('/api/admin/payouts/:purchaseId/pay', authenticateToken, (req, res) => {
     }
 
     res.json({ message: 'Payout marked as paid' });
+  });
+});
+
+// ================================
+// ADMIN ROUTES
+// ================================
+// View all beats (including hidden/problematic ones)
+// Get all beats for admin view
+app.get('/api/admin/beats', authenticateToken, requireAdmin, (req, res) => {
+  const query = `
+    SELECT id, producer_id, title, genre, tempo, duration, preview_url, full_url, created_at, is_active
+    FROM beats
+    ORDER BY created_at DESC
+  `;
+
+  db.all(query, [], (err, rows) => {
+    if (err) {
+      return res.status(500).json({ error: 'Database error' });
+    }
+
+    // Map rows to include derived status
+    const beats = rows.map(beat => ({
+      ...beat,
+      status: beat.is_active ? 'enabled' : 'disabled'
+    }));
+
+    res.json(beats);
+  });
+});
+
+// Disable / enable a beat (soft moderation)
+app.put('/api/admin/beats/:id/status', authenticateToken, requireAdmin, (req, res) => {
+  const beatId = req.params.id;
+  const { is_active } = req.body; // true or false
+
+  // Determine numeric flag and status string
+  const isActiveFlag = is_active ? 1 : 0;
+  const statusString = is_active ? 'enabled' : 'disabled';
+
+  db.run(
+    'UPDATE beats SET is_active = ?, status = ? WHERE id = ?',
+    [isActiveFlag, statusString, beatId],
+    function (err) {
+      if (err) {
+        return res.status(500).json({ error: 'Database error' });
+      }
+
+      if (this.changes === 0) {
+        return res.status(404).json({ message: 'Beat not found' });
+      }
+
+      res.json({
+        message: `Beat ${statusString}`
+      });
+    }
+  );
+});
+
+// GET admin payouts (pending OR all)
+app.get('/api/admin/payouts', authenticateToken, requireAdmin, (req, res) => {
+  const { status } = req.query; // optional: pending | approved
+
+  let query = `
+    SELECT *
+    FROM purchases
+  `;
+  const params = [];
+
+  if (status) {
+    query += ' WHERE payout_status = ?';
+    params.push(status);
+  }
+
+  db.all(query, params, (err, rows) => {
+    if (err) {
+      console.error(err);
+      return res.status(500).json({ error: 'Database error' });
+    }
+
+    res.json(rows);
+  });
+});
+
+
+// Producer's payout request
+app.post('/api/producer/payouts/request', authenticateToken, (req, res) => {
+    if (req.user.role !== 'producer')
+      return res.status(403).json({ error: 'Only producers allowed' });
+
+    db.run(
+      `UPDATE purchases
+       SET payout_status = 'requested'
+       WHERE payout_status = 'pending'
+       AND beat_id IN (
+         SELECT id FROM beats WHERE producer_id = ?
+       )`,
+      [req.user.id],
+      function (err) {
+        if (err) return res.status(500).json({ error: 'Database error' });
+        res.json({ message: 'Payout request submitted' });
+      }
+    );
+  }
+);
+
+// Admin approves payout
+app.put('/api/admin/payouts/:id/approve', authenticateToken, requireAdmin, (req, res) => {
+  const payoutId = req.params.id;
+
+  db.run(
+    `
+    UPDATE purchases
+    SET payout_status = 'approved',
+        paid_at = CURRENT_TIMESTAMP
+    WHERE id = ?
+    `,
+    [payoutId],
+    function (err) {
+      if (err) {
+        console.error(err);
+        return res.status(500).json({ error: 'Database error' });
+      }
+
+      if (this.changes === 0) {
+        return res.status(404).json({ error: 'Payout not found' });
+      }
+
+      res.json({ message: 'Payout approved' });
+    }
+  );
+});
+
+// Producer requests withdrawal
+app.post('/api/producer/withdrawals', authenticateToken, (req, res) => {
+  if (req.user.role !== 'producer') {
+    return res.status(403).json({ error: 'Only producers can request withdrawals' });
+  }
+
+  const producerId = req.user.id;
+
+  // 1️⃣ Calculate available balance
+  const earningsQuery = `
+    SELECT 
+      SUM(price - commission) AS balance
+    FROM purchases
+    WHERE payout_status = 'approved'
+      AND beat_id IN (
+        SELECT id FROM beats WHERE producer_id = ?
+      )
+  `;
+
+  db.get(earningsQuery, [producerId], (err, row) => {
+    if (err) return res.status(500).json({ error: 'Database error' });
+
+    const balance = row.balance || 0;
+
+    if (balance <= 0) {
+      return res.status(400).json({ error: 'No available balance to withdraw' });
+    }
+
+    // 2️⃣ Create withdrawal request
+    db.run(
+      `INSERT INTO withdrawals (producer_id, amount)
+       VALUES (?, ?)`,
+      [producerId, balance],
+      function (err) {
+        if (err) return res.status(500).json({ error: 'Database error' });
+
+        res.status(201).json({
+          message: 'Withdrawal request submitted',
+          withdrawal_id: this.lastID,
+          amount: balance
+        });
+      }
+    );
+  });
+});
+
+// Admin views withdrawal requests
+app.get('/api/admin/withdrawals', authenticateToken, requireAdmin, (req, res) => {
+  db.all(
+    `SELECT w.*, u.email AS producer_email
+     FROM withdrawals w
+     JOIN users u ON w.producer_id = u.id
+     ORDER BY requested_at DESC`,
+    [],
+    (err, rows) => {
+      if (err) return res.status(500).json({ error: 'Database error' });
+      res.json(rows);
+    }
+  );
+});
+
+// Admin approves withdrawal (money sent)
+app.put('/api/admin/withdrawals/:id/approve', authenticateToken, requireAdmin, (req, res) => {
+  const withdrawalId = req.params.id;
+
+  db.run(
+    `UPDATE withdrawals
+     SET status = 'paid', processed_at = CURRENT_TIMESTAMP
+     WHERE id = ? AND status = 'pending'`,
+    [withdrawalId],
+    function (err) {
+      if (err) return res.status(500).json({ error: 'Database error' });
+
+      if (this.changes === 0) {
+        return res.status(404).json({ error: 'Withdrawal not found or already processed' });
+      }
+
+      res.json({ message: 'Withdrawal paid successfully' });
+    }
+  );
+});
+
+// Admin platform analytics
+app.get('/api/admin/analytics', authenticateToken, requireAdmin, (req, res) => {
+  const query = `
+    SELECT
+      COUNT(*) AS total_sales,
+      COALESCE(SUM(price), 0) AS gross_revenue,
+      COALESCE(SUM(commission), 0) AS total_commission,
+      COALESCE(SUM(price - commission), 0) AS total_paid_to_producers,
+      COALESCE(SUM(CASE WHEN payout_status = 'approved' THEN price - commission ELSE 0 END), 0) AS paid_out
+    FROM purchases
+  `;
+
+  db.get(query, [], (err, stats) => {
+    if (err) {
+      console.error('ANALYTICS ERROR:', err.message);
+      return res.status(500).json({ error: 'Database error' });
+    }
+
+    // Compute pending payouts
+    const pending_payouts = stats.total_paid_to_producers - stats.paid_out;
+
+    res.json({
+      total_sales: stats.total_sales,
+      gross_revenue: stats.gross_revenue,
+      total_commission: stats.total_commission,
+      total_paid_to_producers: stats.total_paid_to_producers,
+      paid_out: stats.paid_out,
+      pending_payouts
+    });
   });
 });
 
