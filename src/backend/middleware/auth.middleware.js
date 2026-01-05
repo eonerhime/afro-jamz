@@ -1,5 +1,5 @@
 import jwt from 'jsonwebtoken';
-import { JWT_SECRET } from '../config/env.js';
+import { JWT_SECRET } from '../config/config.js';
 
 export function authenticateToken(req, res, next) {
   console.log('--- AUTH MIDDLEWARE HIT ---');
@@ -41,7 +41,7 @@ export function optionalAuth(req, res, next) {
 
   try {
     const token = header.split(' ')[1];
-    const decoded = jwt.verify(token, SECRET_KEY);
+    const decoded = jwt.verify(token, JWT_SECRET);
     req.user = decoded;
     next();
   } catch {

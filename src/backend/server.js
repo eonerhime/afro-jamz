@@ -8,18 +8,17 @@ import morgan from 'morgan';
 import path from 'path';
 import sqlite3 from 'sqlite3';
 import { fileURLToPath } from 'url';
-import { JWT_SECRET } from './config/env.js';
-import { requireAdmin } from './middleware/admin.middleware.js';
+import { COMMISSION_RATE, CURRENT_INDEMNITY_VERSION, HOLD_DAYS, JWT_SECRET } from './config/config.js';
 import { authenticateToken } from './middleware/auth.middleware.js';
-import { requireProducer } from './middleware/producer.middleware.js';
-
+import { requireAdmin, requireBuyer, requireProducer } from './middleware/role.middleware.js';
+import { issueJWT } from './utils/jwt.js';
+import { getOAuthProfile } from './utils/oauth.js';
 
 const sqlite = sqlite3.verbose();
 const app = express();
 const PORT = process.env.PORT || 3001;
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-
 
 // Middleware
 app.use(express.json());
@@ -121,25 +120,6 @@ function initializeDatabase() {
   });
 }
 
-const authenticateOptional = (req, res, next) => {
-  const header = req.headers.authorization;
-
-  if (!header) {
-    req.user = null;
-    return next();
-  }
-
-  try {
-    const token = header.split(' ')[1];
-    const decoded = jwt.verify(token, JWT_SECRET);
-    req.user = decoded;
-  } catch {
-    req.user = null;
-  }
-
-  next();
-};
-
 // Generate download token
 function generateDownloadToken(userId, beatId) {
   return jwt.sign(
@@ -149,93 +129,217 @@ function generateDownloadToken(userId, beatId) {
   );
 }
 
-// ROUTES
-// Register user
+// =====================
+// REGISTER/ LOGIN USER 
+// =====================
+
+// REGISTER USER (LOCAL ONLY)
 app.post('/api/auth/register', async (req, res) => {
-  const { email, password, displayName, role } = req.body;
+  const { email, password, displayName, role, accept_indemnity } = req.body;
 
   if (!email || !password || !role) {
     return res.status(400).json({ error: 'Email, password, and role are required' });
   }
 
   if (!['buyer', 'producer'].includes(role)) {
-    return res.status(400).json({ error: 'Role must be buyer or producer' });
+    return res.status(400).json({ error: 'Invalid role' });
+  }
+
+  if (role === 'producer' && accept_indemnity !== true) {
+    return res.status(400).json({
+      error: 'Producers must accept indemnity terms'
+    });
   }
 
   try {
     const hashedPassword = await bcrypt.hash(password, 10);
+
     db.run(
-      'INSERT INTO users (email, password_hash, display_name, role) VALUES (?, ?, ?, ?)',
+      `INSERT INTO users (
+        email,
+        password_hash,
+        display_name,
+        role,
+        auth_provider,
+        email_verified
+      ) VALUES (?, ?, ?, ?, 'local', 0)`,
       [email, hashedPassword, displayName, role],
-      function(err) {
+      function (err) {
         if (err) {
-          console.error('REGISTER ERROR:', err.message);
           if (err.code === 'SQLITE_CONSTRAINT_UNIQUE') {
             return res.status(409).json({ error: 'Email already exists' });
           }
           return res.status(500).json({ error: err.message });
         }
-        res.status(201).json({ id: this.lastID, message: 'User created successfully' });
+
+        const userId = this.lastID;
+
+        if (role === 'producer') {
+          db.run(
+            `INSERT INTO producer_indemnity (
+              producer_id,
+              agreed,
+              version,
+              agreed_at
+            ) VALUES (?, 1, ?, CURRENT_TIMESTAMP)`,
+            [userId, CURRENT_INDEMNITY_VERSION]
+          );
+        }
+
+        res.status(201).json({
+          id: userId,
+          message: 'User registered successfully'
+        });
       }
     );
-  } catch (error) {
+  } catch {
     res.status(500).json({ error: 'Server error' });
   }
 });
 
-// Login user
-app.post('/api/auth/login', (req, res) => {
-  const { email, password } = req.body;
+// REGISTER USER (OAUTH ONLY) - NOT TESTED
+app.get('/api/auth/oauth/:provider', (req, res) => {
+  const { role } = req.query;
 
-  if (!email || !password) {
-    return res.status(400).json({ error: 'Email and password are required' });
+  if (!['buyer', 'producer'].includes(role)) {
+    return res.status(400).json({ error: 'Role is required' });
   }
 
-  db.get('SELECT * FROM users WHERE email = ?', [email], async (err, user) => {
-    if (err) {
-      console.error('LOGIN ERROR:', err.message);
-      return res.status(500).json({ error: err.message });
-    }
+  const state = JSON.stringify({ role });
 
-    if (!user) return res.status(401).json({ error: 'Invalid credentials' });
-
-    const isValidPassword = await bcrypt.compare(password, user.password_hash);
-    if (!isValidPassword) return res.status(401).json({ error: 'Invalid credentials' });
-
-    const token = jwt.sign({ 
-      id: user.id, 
-      email: user.email, 
-      role: user.role, 
-      is_admin: user.is_admin }, 
-      JWT_SECRET);
-    res.json({ token, user: { id: user.id, email: user.email, displayName: user.display_name, role: user.role } });
-  });
+  startOAuthFlow(req.params.provider, state, res);
 });
 
-// =====================
-// Beats (Public)
-// =====================
-// Get Licenses for a Beat (Public)
-app.get('/api/beats/:beatId/licenses', (req, res) => {
-  const beatId = Number(req.params.beatId);
+// REGISTER USER (OAUTH ONLY - STORE USER) - NOT TESTED
+app.get('/api/auth/oauth/:provider/callback', async (req, res) => {
+  const oauthProfile = await getOAuthProfile(req);
+  const { email, name, providerId } = oauthProfile;
 
-  db.all(
-    'SELECT * FROM licenses WHERE beat_id = ?',
-    [beatId],
-    (err, rows) => {
-      if (err) return res.status(500).json({ error: 'Database error' });
-      res.json(rows);
+  const { role } = JSON.parse(req.query.state);
+
+  db.get(
+    `SELECT * FROM users WHERE email = ?`,
+    [email],
+    (err, existingUser) => {
+      if (existingUser) {
+        const token = issueJWT(existingUser);
+        return res.redirect(`/auth/success?token=${token}`);
+      }
+
+      // NEW USER
+      if (role === 'producer') {
+        // Redirect to indemnity screen BEFORE DB insert
+        return res.redirect(
+          `/auth/indemnity?provider=${req.params.provider}&email=${email}`
+        );
+      }
+
+      // Buyer → create immediately
+      db.run(
+        `INSERT INTO users (
+          email,
+          display_name,
+          role,
+          auth_provider,
+          oauth_provider_id,
+          email_verified
+        ) VALUES (?, ?, 'buyer', ?, ?, 1)`,
+        [email, name, req.params.provider, providerId],
+        function () {
+          const token = issueJWT({ id: this.lastID, role: 'buyer' });
+          res.redirect(`/auth/success?token=${token}`);
+        }
+      );
     }
   );
 });
 
-// Get beats (PUBLIC – only enabled beats) with licenses included
+// REGISTER: PRODUCER INDEMNITY VERIFICATION
+app.post('/api/auth/oauth/indemnity', (req, res) => {
+  const { email, provider, providerId, accept_indemnity } = req.body;
+
+  if (accept_indemnity !== true) {
+    return res.status(403).json({
+      error: 'Indemnity not accepted. Signup cancelled.'
+    });
+  }
+
+  db.run(
+    `INSERT INTO users (
+      email,
+      role,
+      auth_provider,
+      oauth_provider_id,
+      email_verified
+    ) VALUES (?, 'producer', ?, ?, 1)`,
+    [email, provider, providerId],
+    function () {
+      const userId = this.lastID;
+
+      db.run(
+        `INSERT INTO producer_indemnity (
+          producer_id,
+          agreed,
+          version,
+          agreed_at
+        ) VALUES (?, 1, ?, CURRENT_TIMESTAMP)`,
+        [userId, CURRENT_INDEMNITY_VERSION]
+      );
+
+      const token = issueJWT({ id: userId, role: 'producer' });
+      res.json({ token });
+    }
+  );
+});
+
+// LOGIN USER (LOCAL ONLY)
+app.post('/api/auth/login', (req, res) => {
+  const { email, password } = req.body;
+
+  db.get(
+    `SELECT * FROM users WHERE email = ?`,
+    [email],
+    async (err, user) => {
+      if (!user) {
+        return res.status(401).json({ error: 'Invalid credentials' });
+      }
+
+      if (user.auth_provider !== 'local') {
+        return res.status(400).json({
+          error: `Please log in using ${user.auth_provider}`
+        });
+      }
+
+      const valid = await bcrypt.compare(password, user.password_hash);
+      if (!valid) {
+        return res.status(401).json({ error: 'Invalid credentials' });
+      }
+
+      const token = issueJWT(user);
+
+      res.json({ token, 
+        user: {
+          id: user.id,
+          role:user.role,
+          email: user.email,
+          name: user.display_name
+        }
+      });
+    }
+  );
+});
+
+// =====================
+// ALL BEATS (Public)
+// =====================
+
+// Get all beats (Only enabled beats) with licenses included
 app.get('/api/beats', (req, res) => {
   const { search, genre, tempo, producer } = req.query;
 
   let query = `
     SELECT 
-      b.*, 
+      b.*,
       u.display_name AS producer_name
     FROM beats b
     JOIN users u ON b.producer_id = u.id
@@ -265,19 +369,23 @@ app.get('/api/beats', (req, res) => {
   }
 
   db.all(query, params, (err, beats) => {
-    if (err) {
-      console.error(err);
-      return res.status(500).json({ error: 'Database error' });
-    }
-
+    if (err) return res.status(500).json({ error: 'Database error' });
     if (beats.length === 0) return res.json([]);
 
+    // Get all beat IDs
     const beatIds = beats.map(b => b.id);
     const placeholders = beatIds.map(() => '?').join(',');
-    const licensesQuery = `SELECT * FROM licenses WHERE beat_id IN (${placeholders})`;
 
-    db.all(licensesQuery, beatIds, (err, licenses) => {
-      if (err) return res.status(500).json({ error: 'Database error' });
+    // Fetch licenses for these beats from beat_licenses join
+    const licenseQuery = `
+      SELECT bl.beat_id, l.id AS license_id, l.name, l.description, l.usage_rights, bl.price
+      FROM beat_licenses bl
+      JOIN licenses l ON bl.license_id = l.id
+      WHERE bl.beat_id IN (${placeholders})
+    `;
+
+    db.all(licenseQuery, beatIds, (err, licenses) => {
+      if (err) return res.status(500).json({ error: 'Database error fetching licenses' });
 
       const beatsWithLicenses = beats.map(b => ({
         ...b,
@@ -289,96 +397,176 @@ app.get('/api/beats', (req, res) => {
   });
 });
 
-// ----- Protected routes ----- //
+// Get single beat with licenses details (Only enabled beats)
+app.get('/api/beats/:id', (req, res) => {
+  const beatId = Number(req.params.id);
 
-// =====================
-// Beats (Producer)
-// =====================
-// Create beat license (Producer only)
-app.post('/api/beats/:beatId/licenses', authenticateToken,
-  (req, res) => {
-    if (req.user.role !== 'producer') {
-      return res.status(403).json({ error: 'Only producers can create licenses' });
-    }
-
-    const beatId = Number(req.params.beatId);
-    const { name, description, price, usageRights } = req.body;
-
-    if (!name || !price) {
-      return res.status(400).json({ error: 'Name and price are required' });
-    }
-
-    // Verify beat ownership
-    db.get(
-      'SELECT * FROM beats WHERE id = ?',
-      [beatId],
-      (err, beat) => {
-        if (!beat) return res.status(404).json({ error: 'Beat not found' });
-
-        if (beat.producer_id !== req.user.id) {
-          return res.status(403).json({ error: 'Not your beat' });
-        }
-
-        db.run(
-          `INSERT INTO licenses 
-           (beat_id, name, description, price, usage_rights)
-           VALUES (?, ?, ?, ?, ?)`,
-          [beatId, name, description, price, usageRights],
-          function () {
-            res.status(201).json({
-              id: this.lastID,
-              message: 'License created successfully'
-            });
-          }
-        );
-      }
-    );
-  }
-);
-
-// Update a license (Producer only)
-app.put('/api/licenses/:id', authenticateToken, (req, res) => {
-  if (req.user.role !== 'producer') {
-    return res.status(403).json({ error: 'Only producers can edit licenses' });
-  }
-
-  const licenseId = Number(req.params.id);
-  const { name, description, price, usageRights } = req.body;
-
-  // Step 1: Load license + beat
+  // 1️⃣ Fetch the beat and producer info
   db.get(
-    `SELECT l.*, b.producer_id 
-     FROM licenses l
-     JOIN beats b ON l.beat_id = b.id
-     WHERE l.id = ?`,
-    [licenseId],
-    (err, license) => {
-      if (!license) return res.status(404).json({ error: 'License not found' });
+    `
+    SELECT 
+      b.*,
+      u.display_name AS producer_name
+    FROM beats b
+    JOIN users u ON b.producer_id = u.id
+    WHERE b.id = ?
+      AND b.is_active = 1
+      AND b.status = 'enabled'
+    `,
+    [beatId],
+    (err, beat) => {
+      if (err) return res.status(500).json({ error: 'Database error' });
+      if (!beat) return res.status(404).json({ error: 'Beat not found' });
 
-      // Step 2: Ownership check
-      if (license.producer_id !== req.user.id) {
-        return res.status(403).json({ error: 'Not your license' });
+      // 2️⃣ Fetch the licenses for this beat
+      db.all(
+        `
+        SELECT 
+          bl.beat_id, 
+          l.id AS license_id, 
+          l.name, 
+          l.description, 
+          l.usage_rights, 
+          bl.price
+        FROM beat_licenses bl
+        JOIN licenses l ON bl.license_id = l.id
+        WHERE bl.beat_id = ?
+        `,
+        [beatId],
+        (err, licenses) => {
+          if (err) return res.status(500).json({ error: 'Database error fetching licenses' });
+
+          // 3️⃣ Construct response
+          res.json({
+            ...beat,
+            licenses: licenses
+          });
+        }
+      );
+    }
+  );
+});
+
+// Get Licenses for a Beat 
+app.get('/api/beats/:beatId/licenses', (req, res) => {
+  const beatId = Number(req.params.beatId);
+
+  if (!beatId) {
+    return res.status(400).json({ error: 'Invalid beat ID' });
+  }
+
+  db.all(
+    `
+    SELECT
+      l.id AS license_id,
+      l.name,
+      l.description,
+      l.usage_rights,
+      bl.price
+    FROM beat_licenses bl
+    JOIN licenses l ON bl.license_id = l.id
+    WHERE bl.beat_id = ?
+    `,
+    [beatId],
+    (err, rows) => {
+      if (err) {
+        console.error('GET BEAT LICENSES ERROR:', err.message);
+        return res.status(500).json({ error: 'Database error' });
       }
 
-      // Step 3: Check purchases
+      res.json(rows);
+    }
+  );
+});
+
+
+// =====================
+// PROTECTED ROUTES
+// =====================
+
+// ================================
+// BUYER ROUTES
+// ================================
+
+// Purchase a beat
+app.post('/api/buyer/purchase', authenticateToken, requireBuyer, (req, res) => {
+  const { beat_id, license_id } = req.body;
+  const buyerId = req.user.id;
+
+  if (!beat_id || !license_id) {
+    return res.status(400).json({ error: 'Missing required fields' });
+  }
+
+  // 1️⃣ Validate beat
+  db.get(
+    `SELECT id, producer_id, status, is_active FROM beats WHERE id = ?`,
+    [beat_id],
+    (err, beat) => {
+      if (err) return res.status(500).json({ error: 'Database error' });
+      if (!beat || beat.status !== 'enabled' || beat.is_active !== 1) {
+        return res.status(400).json({ error: 'Beat not available for purchase' });
+      }
+
+      // 2️⃣ Fetch license variant for this beat
       db.get(
-        'SELECT id FROM purchases WHERE license_id = ? LIMIT 1',
-        [licenseId],
-        (err, purchase) => {
-          if (purchase) {
-            return res.status(400).json({
-              error: 'License cannot be edited after it has been purchased'
-            });
+        `
+        SELECT lv.id AS variant_id, lv.price, lv.is_exclusive, lv.max_sales,
+               l.id AS license_global_id, l.name, l.usage_rights
+        FROM license_variants lv
+        JOIN licenses l ON lv.license_id = l.id
+        WHERE lv.license_id = ? AND lv.beat_id = ?
+        `,
+        [license_id, beat_id],
+        (err, variant) => {
+          if (err) return res.status(500).json({ error: 'Database error' });
+          if (!variant) {
+            return res.status(400).json({ error: 'Invalid license for this beat' });
           }
 
-          // Step 4: Update
+          const price = variant.price;
+          const commission = price * COMMISSION_RATE;
+          const seller_earnings = price - commission;
+
+          // 3️⃣ Create purchase
           db.run(
-            `UPDATE licenses
-             SET name = ?, description = ?, price = ?, usage_rights = ?
-             WHERE id = ?`,
-            [name, description, price, usageRights, licenseId],
-            () => {
-              res.json({ message: 'License updated successfully' });
+            `
+            INSERT INTO purchases (
+              buyer_id,
+              beat_id,
+              license_id,
+              price,
+              commission,
+              seller_earnings,
+              payout_status,
+              eligible_for_withdrawal,
+              hold_until
+            )
+            VALUES (?, ?, ?, ?, ?, ?, 'unpaid', 1, DATETIME('now', '+' || ? || ' days'))
+            `,
+            [
+              buyerId,
+              beat_id,
+              variant.variant_id, // store variant id
+              price,
+              commission,
+              seller_earnings,
+              HOLD_DAYS
+            ],
+            function (err) {
+              if (err) {
+                console.error('PURCHASE ERROR:', err);
+                return res.status(500).json({ error: 'Failed to create purchase' });
+              }
+
+              res.status(201).json({
+                message: 'Purchase successful',
+                purchase_id: this.lastID,
+                beat_id,
+                license_name: variant.name,
+                license_price: variant.price,
+                is_exclusive: variant.is_exclusive,
+                max_sales: variant.max_sales
+              });
             }
           );
         }
@@ -387,142 +575,62 @@ app.put('/api/licenses/:id', authenticateToken, (req, res) => {
   );
 });
 
-// Upload beat (producers only)
-app.post('/api/beats', authenticateToken, (req, res) => {
-  if (req.user.role !== 'producer') {
-    return res.status(403).json({ error: 'Only producers can upload beats' });
-  }
+// Get user purchases (authenticated)
+app.get('/api/buyer/purchases', authenticateToken, requireBuyer, (req, res) => {
+  const buyerId = req.user.id;
 
-  const { title, genre, tempo, duration, previewUrl, fullUrl } = req.body;
+  const query = `
+    SELECT
+      p.id AS purchase_id,
+      p.price AS paid_price,
+      p.commission,
+      p.seller_earnings,
+      p.payout_status,
+      p.purchased_at,
+      p.refund_status,
+      p.refunded_at,
+      b.id AS beat_id,
+      b.title AS beat_title,
+      b.genre,
+      b.tempo,
+      b.duration,
+      b.preview_url,
+      b.full_url,
+      b.cover_art_url,
+      b.key,
+      b.bpm,
+      b.tags,
+      l.name AS license_name,
+      l.usage_rights,
+      lv.price AS license_price,
+      lv.is_exclusive,
+      lv.max_sales
+    FROM purchases p
+    JOIN beats b ON p.beat_id = b.id
+    LEFT JOIN license_variants lv ON p.license_id = lv.id
+    LEFT JOIN licenses l ON lv.license_id = l.id
+    WHERE p.buyer_id = ?
+    ORDER BY p.purchased_at DESC
+  `;
 
-  if (!title) {
-    return res.status(400).json({ error: 'Title is required' });
-  }
-
-  db.run(
-    'INSERT INTO beats (producer_id, title, genre, tempo, duration, preview_url, full_url) VALUES (?, ?, ?, ?, ?, ?, ?)',
-    [req.user.id, title, genre, tempo, duration, previewUrl, fullUrl],
-    function(err) {
-      if (err) return res.status(500).json({ error: 'Database error' });
-      res.status(201).json({ id: this.lastID, message: 'Beat uploaded successfully' });
-    }
-  );
-});
-
-// Update a beat
-app.put('/api/beats/:id', authenticateToken, (req, res) => {
-  console.log('UPDATE HIT:', req.params.id);
-
-  if (req.user.role !== 'producer') {
-    return res.status(403).json({ error: 'Only producers can update beats' });
-  }
-
-  const beatId = Number(req.params.id);
-  const { title, genre, tempo, duration, previewUrl, fullUrl } = req.body;
-
-  db.get('SELECT * FROM beats WHERE id = ?', [beatId], (err, beat) => {
-    if (err) return res.status(500).json({ error: err.message });
-    if (!beat) return res.status(404).json({ error: 'Beat not found' });
-
-    if (Number(beat.producer_id) !== Number(req.user.id)) {
-      return res.status(403).json({ error: 'Not your beat' });
-    }
-
-    db.run(
-      `UPDATE beats
-       SET title = ?, genre = ?, tempo = ?, duration = ?, preview_url = ?, full_url = ?
-       WHERE id = ?`,
-      [title, genre, tempo, duration, previewUrl, fullUrl, beatId],
-      function (err) {
-        if (err) return res.status(500).json({ error: err.message });
-        res.json({ message: 'Beat updated successfully' });
-      }
-    );
-  });
-});
-
-// Delete a beat
-app.delete('/api/beats/:id', authenticateToken, (req, res) => {
-  if (req.user.role !== 'producer') {
-    return res.status(403).json({ error: 'Only producers can delete beats' });
-  }
-
-  const beatId = Number(req.params.id);
-
-  db.get('SELECT * FROM beats WHERE id = ?', [beatId], (err, beat) => {
-    if (!beat) return res.status(404).json({ error: 'Beat not found' });
-
-    if (Number(beat.producer_id) !== Number(req.user.id)) {
-      return res.status(403).json({ error: 'Not your beat' });
+  db.all(query, [buyerId], (err, rows) => {
+    if (err) {
+      console.error('FETCH BUYER PURCHASES ERROR:', err);
+      return res.status(500).json({ error: 'Database error' });
     }
 
-    db.run('DELETE FROM beats WHERE id = ?', [beatId], () => {
-      res.json({ message: 'Beat deleted successfully' });
+    // Debug for missing links
+    rows.forEach(r => {
+      if (!r.beat_id) console.log('Missing beat for purchase:', r.purchase_id);
+      if (!r.license_name) console.log('Missing license for purchase:', r.purchase_id);
     });
+
+    res.json(rows);
   });
 });
 
-// =====================
-// Beats (Access-controlled)
-// =====================
-// Get single beat (access-controlled)
-app.get('/api/beats/:id', authenticateOptional, async (req, res) => {
-  const beatId = req.params.id;
-  const user = req.user || null;
-
-  db.get(
-    `
-    SELECT b.*, u.display_name AS producer_name
-    FROM beats b
-    JOIN users u ON b.producer_id = u.id
-    WHERE b.id = ?
-    `,
-    [beatId],
-    async (err, beat) => {
-      if (err) return res.status(500).json({ error: 'Database error' });
-      if (!beat) return res.status(404).json({ error: 'Beat not found' });
-
-      let canAccessFull = false;
-
-      if (user) {
-        if (user.role === 'producer' && user.id === beat.producer_id) {
-          canAccessFull = true;
-        } else {
-          db.get(
-            `SELECT 1 FROM purchases WHERE buyer_id = ? AND beat_id = ?`,
-            [user.id, beatId],
-            (err, row) => {
-              if (row) canAccessFull = true;
-              respond();
-            }
-          );
-          return;
-        }
-      }
-
-      respond();
-
-      function respond() {
-        res.json({
-          id: beat.id,
-          title: beat.title,
-          genre: beat.genre,
-          tempo: beat.tempo,
-          duration: beat.duration,
-          preview_url: beat.preview_url,
-          full_url: canAccessFull ? beat.full_url : null,
-          producer_name: beat.producer_name,
-          access: canAccessFull ? 'full' : 'preview'
-        });
-      }
-    }
-  );
-});
-
-// ================================
-// SECURE STREAM / DOWNLOAD ROUTE
-// ================================
-app.get('/api/beats/:id/download', authenticateToken, (req, res) => {
+// Download purchased beat - NOT TESTED
+app.get('/api/buyer/beats/:id/download', authenticateToken, (req, res) => {
   const beatId = req.params.id;
   const userId = req.user.id;
 
@@ -561,74 +669,8 @@ app.get('/api/beats/:id/download', authenticateToken, (req, res) => {
   );
 });
 
-// Get user purchases (authenticated)
-app.get('/api/purchases', authenticateToken, (req, res) => {
-  db.all(
-    `SELECT p.*, b.title, l.name as license_name, l.usage_rights
-     FROM purchases p
-     JOIN beats b ON p.beat_id = b.id
-     JOIN licenses l ON p.license_id = l.id
-     WHERE p.buyer_id = ?`,
-    [req.user.id],
-    (err, rows) => {
-      if (err) return res.status(500).json({ error: 'Database error' });
-      res.json(rows);
-    }
-  );
-});
-
-// Purchase a beat
-app.post('/api/purchases', authenticateToken, (req, res) => {
-  if (req.user.role !== 'buyer') {
-    return res.status(403).json({ error: 'Only buyers can purchase beats' });
-  }
-
-  const { beatId, licenseId } = req.body;
-
-  if (!beatId || !licenseId) {
-    return res.status(400).json({ error: 'beatId and licenseId are required' });
-  }
-
-  // Load license + beat
-  db.get(
-    `SELECT l.price, b.producer_id
-     FROM licenses l
-     JOIN beats b ON l.beat_id = b.id
-     WHERE l.id = ? AND b.id = ?`,
-    [licenseId, beatId],
-    (err, record) => {
-      if (!record) {
-        return res.status(404).json({ error: 'Beat or license not found' });
-      }
-
-      // Prevent self-purchase
-      if (record.producer_id === req.user.id) {
-        return res.status(400).json({ error: 'Cannot purchase your own beat' });
-      }
-
-      const price = record.price;
-      const commission = price * 0.15;
-
-      db.run(
-        `INSERT INTO purchases
-         (buyer_id, beat_id, license_id, price, commission)
-         VALUES (?, ?, ?, ?, ?)`,
-        [req.user.id, beatId, licenseId, price, commission],
-        function () {
-          res.status(201).json({
-            id: this.lastID,
-            price,
-            commission,
-            message: 'Purchase completed successfully'
-          });
-        }
-      );
-    }
-  );
-});
-
-// Generate secure download URL (buyers only)
-app.get('/api/beats/:id/secure-url', authenticateToken, (req, res) => {
+// Generate secure download URL 
+app.get('/api/buyer/beats/:id/secure-url', authenticateToken, (req, res) => {
   const beatId = req.params.id;
   const userId = req.user.id;
 
@@ -650,57 +692,274 @@ app.get('/api/beats/:id/secure-url', authenticateToken, (req, res) => {
   );
 });
 
+// Buyer lodges a beat purchase dispute
+app.post('/api/buyer/purchases/:beatId/dispute', authenticateToken, requireBuyer, (req, res) => {
+  const purchaseId = Number(req.params.id);
+  const buyerId = req.user.id;
+  const { reason } = req.body;
+
+  if (!reason) {
+    return res.status(400).json({ error: 'Dispute reason is required' });
+  }
+
+  db.get(
+    `SELECT * FROM purchases WHERE id = ? AND buyer_id = ?`,
+    [purchaseId, buyerId],
+    (err, purchase) => {
+      if (err) return res.status(500).json({ error: 'Database error' });
+      if (!purchase) return res.status(404).json({ error: 'Purchase not found' });
+
+      db.run(
+        `UPDATE purchases
+         SET refund_status = 'disputed',
+             flag_reason = ?,
+             flagged_at = CURRENT_TIMESTAMP,
+             hold_until = DATETIME('now', '+0 days')
+         WHERE id = ? AND buyer_id = ?`,
+        [reason, purchaseId, buyerId],
+        function(err) {
+          if (err) return res.status(500).json({ error: 'Failed to flag dispute' });
+
+          res.json({
+            message: 'Dispute submitted successfully',
+            purchase_id: purchaseId,
+            reason
+          });
+        }
+      );
+    }
+  );
+});
+
+
 // ================================
 // PRODUCER ROUTES
 // ================================
-// Sales Dashboard
-app.get('/api/sales', authenticateToken, requireAdmin, (req, res) => {
-  const query = `
-    SELECT
-      p.id AS purchase_id,
-      b.id AS beat_id,
-      b.title AS beat_title,
-      u.email AS buyer_email,
-      l.name AS license_name,
-      l.price,
-      p.commission,
-      p.created_at AS purchased_at
-    FROM purchases p
-    JOIN beats b ON p.beat_id = b.id
-    JOIN users u ON p.buyer_id = u.id
-    JOIN licenses l ON p.license_id = l.id
-    WHERE b.producer_id = ?
-    ORDER BY p.created_at DESC
-  `;
 
-  db.all('SELECT * FROM purchases', [], (err, rows) => {
-    if (err) {
-      console.error('PURCHASES QUERY ERROR:', err.message);
-      return res.status(500).json({ error: 'Database error' });
-    }
-    res.json(rows);
+// Upload beat 
+app.post('/api/producer/beats/upload', authenticateToken, requireProducer, (req, res) => {
+  const producerId = req.user.id;
+
+  const {
+    title,
+    genre,
+    tempo,
+    duration,
+    previewUrl,
+    fullUrl,
+    licenses
+  } = req.body;
+
+  if (!title || !Array.isArray(licenses) || licenses.length === 0) {
+    return res.status(400).json({
+      error: 'Title and at least one license are required'
+    });
+  }
+
+  db.serialize(() => {
+    // 1️⃣ Insert beat
+    db.run(
+      `
+      INSERT INTO beats (
+        producer_id,
+        title,
+        genre,
+        tempo,
+        duration,
+        preview_url,
+        full_url,
+        is_active,
+        status,
+        dispute_status,
+        moderation_status
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, 1, 'enabled', 'clean', 'clean')
+      `,
+      [
+        producerId,
+        title,
+        genre,
+        tempo,
+        duration,
+        previewUrl,
+        fullUrl
+      ],
+      function (err) {
+        if (err) {
+          console.error(err);
+          return res.status(500).json({ error: 'Failed to create beat' });
+        }
+
+        const beatId = this.lastID;
+
+        // 2️⃣ Prepare beat_licenses inserts
+        const stmt = db.prepare(`
+          INSERT INTO beat_licenses (beat_id, license_id, price)
+          VALUES (?, ?, ?)
+        `);
+
+        for (const lic of licenses) {
+          if (!lic.license_id || !lic.price) {
+            stmt.finalize();
+            return res.status(400).json({
+              error: 'Each license must include license_id and price'
+            });
+          }
+
+          stmt.run(beatId, lic.license_id, lic.price);
+        }
+
+        stmt.finalize(err => {
+          if (err) {
+            console.error(err);
+            return res.status(500).json({ error: 'Failed to attach licenses' });
+          }
+
+          res.status(201).json({
+            message: 'Beat uploaded successfully',
+            beat_id: beatId
+          });
+        });
+      }
+    );
   });
-
 });
 
-// Sales Summary
-app.get('/api/sales/summary', authenticateToken, requireAdmin, (req, res) => {
-  const query = `
-    SELECT 
-      COUNT(p.id) AS total_sales,
-      COALESCE(SUM(p.price), 0) AS gross_revenue,
-      COALESCE(SUM(p.commission), 0) AS total_commission,
-      COALESCE(SUM(p.price - p.commission), 0) AS net_earnings
-    FROM purchases p
-  `;
+// Update a beat 
+app.put('/api/producer/beats/:id', authenticateToken, requireProducer, (req, res) => {
+  const beatId = Number(req.params.id);
 
-  db.get(query, [], (err, row) => {
-    if (err) {
-      console.error('SALES SUMMARY ERROR:', err.message);
-      return res.status(500).json({ error: 'Database error' });
+  const {
+    title,
+    genre,
+    tempo,
+    duration,
+    previewUrl,
+    fullUrl,
+    key,
+    bpm,
+    cover_art_url,
+    tags,
+    licenses // optional
+  } = req.body;
+
+  db.get(`SELECT * FROM beats WHERE id = ?`, [beatId], (err, beat) => {
+    if (err) return res.status(500).json({ error: 'Database error' });
+    if (!beat) return res.status(404).json({ error: 'Beat not found' });
+
+    // Producers can only edit their own beats
+    if (req.user.role === 'producer' && beat.producer_id !== req.user.id) {
+      return res.status(403).json({ error: 'Not your beat' });
     }
-    res.json(row);
+
+    // Preserve existing values
+    const updatedBeat = {
+      title: title ?? beat.title,
+      genre: genre ?? beat.genre,
+      tempo: tempo ?? beat.tempo,
+      duration: duration ?? beat.duration,
+      preview_url: previewUrl ?? beat.preview_url,
+      full_url: fullUrl ?? beat.full_url,
+      key: key ?? beat.key,
+      bpm: bpm ?? beat.bpm,
+      cover_art_url: cover_art_url ?? beat.cover_art_url,
+      tags: tags ?? beat.tags
+    };
+
+    // Update the beat fields
+    db.run(
+      `
+      UPDATE beats
+      SET title = ?, genre = ?, tempo = ?, duration = ?, 
+          preview_url = ?, full_url = ?, key = ?, bpm = ?, 
+          cover_art_url = ?, tags = ?
+      WHERE id = ?
+      `,
+      [
+        updatedBeat.title,
+        updatedBeat.genre,
+        updatedBeat.tempo,
+        updatedBeat.duration,
+        updatedBeat.preview_url,
+        updatedBeat.full_url,
+        updatedBeat.key,
+        updatedBeat.bpm,
+        updatedBeat.cover_art_url,
+        updatedBeat.tags,
+        beatId
+      ],
+      function (err) {
+        if (err) return res.status(500).json({ error: err.message });
+
+        // Handle license updates only if licenses array is provided
+        if (Array.isArray(licenses)) {
+          // Check if any purchase exists for this beat
+          db.get(
+            `SELECT COUNT(*) AS count FROM purchases WHERE beat_id = ?`,
+            [beatId],
+            (err, row) => {
+              if (err) return res.status(500).json({ error: 'Database error checking purchases' });
+
+              if (row.count > 0 && req.user.role === 'producer') {
+                // Purchases exist → producers cannot update licenses
+                return res.status(403).json({
+                  error: 'Cannot update licenses: this beat has been purchased'
+                });
+              }
+
+              // Safe to update licenses
+              db.run(`DELETE FROM beat_licenses WHERE beat_id = ?`, [beatId], (err) => {
+                if (err) return res.status(500).json({ error: 'Failed to update licenses' });
+
+                const stmt = db.prepare(
+                  `INSERT INTO beat_licenses (beat_id, license_id, price) VALUES (?, ?, ?)`
+                );
+
+                licenses.forEach(l => stmt.run([beatId, l.license_id, l.price]));
+
+                stmt.finalize(() => {
+                  // Return updated beat
+                  db.get(`SELECT * FROM beats WHERE id = ?`, [beatId], (err, updated) => {
+                    if (err) return res.status(500).json({ error: 'Error fetching updated beat' });
+                    res.json({
+                      message: 'Beat and licenses updated successfully',
+                      beat: updated
+                    });
+                  });
+                });
+              });
+            }
+          );
+        } else {
+          // No licenses to update → just return updated beat
+          db.get(`SELECT * FROM beats WHERE id = ?`, [beatId], (err, updated) => {
+            if (err) return res.status(500).json({ error: 'Error fetching updated beat' });
+            res.json({ message: 'Beat updated successfully', beat: updated });
+          });
+        }
+      }
+    );
   });
+});
+
+// View all beats
+app.get('/api/producer/beats', authenticateToken, requireProducer, (req, res) => {
+  const producerId = req.user.id;
+
+  db.all(
+    `SELECT *
+     FROM beats
+     WHERE producer_id = ?
+     ORDER BY created_at DESC`,
+    [producerId],
+    (err, rows) => {
+      if (err) return res.status(500).json({ error: 'Database error' });
+
+      res.json({
+        total: rows.length,
+        beats: rows
+      });
+    }
+  );
 });
 
 // Producer Dashboard Route
@@ -736,115 +995,32 @@ app.get('/api/producer/dashboard', authenticateToken, requireProducer, (req, res
   }
 );
 
-// Producer's payout request
-app.post('/api/producer/payouts/request', authenticateToken, (req, res) => {
-    if (req.user.role !== 'producer')
-      return res.status(403).json({ error: 'Only producers allowed' });
-
-    db.run(
-      `UPDATE purchases
-       SET payout_status = 'requested'
-       WHERE payout_status = 'pending'
-       AND beat_id IN (
-         SELECT id FROM beats WHERE producer_id = ?
-       )`,
-      [req.user.id],
-      function (err) {
-        if (err) return res.status(500).json({ error: 'Database error' });
-        res.json({ message: 'Payout request submitted' });
-      }
-    );
-  }
-);
-
-// Producer requests withdrawal
-app.post('/api/producer/withdrawals', authenticateToken, (req, res) => {
-  const producerId = req.user.id;
-  const { amount } = req.body;
-
-  // 1️⃣ Calculate pending earnings
-  const pendingQuery = `
-    SELECT 
-      COALESCE(SUM(p.price - p.commission), 0) AS pending_amount
-    FROM purchases p
-    JOIN beats b ON p.beat_id = b.id
-    WHERE b.producer_id = ?
-      AND p.payout_status = 'pending'
-  `;
-
-  db.get(pendingQuery, [producerId], (err, row) => {
-    if (err) {
-      console.error(err);
-      return res.status(500).json({ error: 'Database error' });
-    }
-
-    const pendingAmount = row.pending_amount;
-
-    // 2️⃣ Validate withdrawal
-    if (pendingAmount <= 0) {
-      return res.status(400).json({ error: 'No pending earnings available' });
-    }
-
-    if (amount > pendingAmount) {
-      return res.status(400).json({
-        error: 'Requested amount exceeds pending earnings',
-        pendingAmount
-      });
-    }
-
-    // 3️⃣ Create withdrawal request
-    db.run(
-      `
-      INSERT INTO withdrawals (producer_id, amount, status)
-      VALUES (?, ?, 'pending')
-      `,
-      [producerId, amount],
-      function (err) {
-        if (err) {
-          console.error(err);
-          return res.status(500).json({ error: 'Database error' });
-        }
-
-        res.json({
-          message: 'Withdrawal request submitted',
-          withdrawal: {
-            id: this.lastID,
-            producer_id: producerId,
-            amount,
-            status: 'pending'
-          }
-        });
-      }
-    );
-  });
-});
-
-
-// Producer Payout List Route
-app.get('/api/producer/payouts', authenticateToken, (req, res) => {
-  if (req.user.role !== 'producer') {
-    return res.status(403).json({ error: 'Access denied' });
-  }
-
+// Producer Sales Dashboard
+app.get('/api/producer/sales', authenticateToken, requireProducer, (req, res) => {
   const producerId = req.user.id;
 
   const query = `
-    SELECT 
+    SELECT
       p.id AS purchase_id,
+      b.id AS beat_id,
       b.title AS beat_title,
-      p.price,
+      u.email AS buyer_email,
+      l.name AS license_name,
+      p.price AS paid_price,
       p.commission,
-      (p.price - p.commission) AS payout_amount,
-      p.payout_status,
+      p.seller_earnings,
       p.purchased_at
     FROM purchases p
     JOIN beats b ON p.beat_id = b.id
+    JOIN users u ON p.buyer_id = u.id
+    JOIN licenses l ON p.license_id = l.id
     WHERE b.producer_id = ?
+    ORDER BY p.purchased_at DESC
   `;
 
   db.all(query, [producerId], (err, rows) => {
     if (err) {
-      console.error(err);
+      console.error('PRODUCER SALES ERROR:', err.message);
       return res.status(500).json({ error: 'Database error' });
     }
 
@@ -852,11 +1028,237 @@ app.get('/api/producer/payouts', authenticateToken, (req, res) => {
   });
 });
 
+// Producer Sales Summary
+app.get('/api/producer/sales/summary', authenticateToken, requireProducer, (req, res) => {
+  const producerId = req.user.id;
+
+  const query = `
+    SELECT 
+      COUNT(p.id) AS total_sales,
+      COALESCE(SUM(p.price), 0) AS gross_revenue,
+      COALESCE(SUM(p.commission), 0) AS total_commission,
+      COALESCE(SUM(p.seller_earnings), 0) AS net_earnings
+    FROM purchases p
+    JOIN beats b ON p.beat_id = b.id
+    WHERE b.producer_id = ?
+  `;
+
+  db.get(query, [producerId], (err, row) => {
+    if (err) {
+      console.error('PRODUCER SALES SUMMARY ERROR:', err.message);
+      return res.status(500).json({ error: 'Database error' });
+    }
+
+    res.json(row);
+  });
+});
+
+// Producer requests withdrawal
+app.post('/api/producer/withdrawals', authenticateToken, requireProducer, (req, res) => {
+  const producerId = req.user.id;
+  const { amount } = req.body;
+
+  if (!amount || amount <= 0) {
+    return res.status(400).json({ error: 'Invalid withdrawal amount' });
+  }
+
+  // Calculate available earnings for this producer (exclude disputed/refunded)
+  const earningsQuery = `
+    SELECT COALESCE(SUM(p.seller_earnings), 0) AS available
+    FROM purchases p
+    JOIN beats b ON p.beat_id = b.id
+    WHERE b.producer_id = ?
+      AND p.payout_status = 'unpaid'
+      AND (p.refund_status IS NULL OR p.refund_status != 'disputed')
+  `;
+
+  db.get(earningsQuery, [producerId], (err, row) => {
+    if (err) return res.status(500).json({ error: 'Database error' });
+
+    if (row.available <= 0) {
+      return res.status(400).json({ error: 'No earnings available for withdrawal' });
+    }
+
+    if (amount > row.available) {
+      return res.status(400).json({
+        error: 'Amount exceeds available earnings',
+        available: row.available
+      });
+    }
+
+    db.serialize(() => {
+      // 1️⃣ Create withdrawal record with status 'paid'
+      db.run(
+        `INSERT INTO withdrawals (producer_id, amount, status)
+         VALUES (?, ?, 'paid')`,
+        [producerId, amount],
+        function(err) {
+          if (err) return res.status(500).json({ error: 'Failed to create withdrawal' });
+
+          const withdrawalId = this.lastID;
+
+          // 2️⃣ Mark eligible purchases as paid
+          db.run(
+            `
+            UPDATE purchases
+            SET payout_status = 'paid', withdrawal_id = ?
+            WHERE id IN (
+              SELECT p.id
+              FROM purchases p
+              JOIN beats b ON p.beat_id = b.id
+              WHERE b.producer_id = ?
+                AND p.payout_status = 'unpaid'
+                AND (p.refund_status IS NULL OR p.refund_status != 'disputed')
+            )
+            `,
+            [withdrawalId, producerId],
+            function(err) {
+              if (err) return res.status(500).json({ error: 'Failed to update purchases' });
+
+              res.json({
+                message: 'Withdrawal successful',
+                withdrawal: {
+                  id: withdrawalId,
+                  producer_id: producerId,
+                  amount,
+                  status: 'paid'
+                }
+              });
+            }
+          );
+        }
+      );
+    });
+  });
+});
+
+// Disable beat (not listed in beats list)
+app.put('/api/producer/beats/:id/status', authenticateToken, requireProducer, (req, res) => {
+  const beatId = Number(req.params.id);
+  const producerId = req.user.id;
+  const { status } = req.body;
+
+  const allowedStatuses = ['enabled', 'disabled'];
+  if (!allowedStatuses.includes(status)) {
+    return res.status(400).json({ error: 'Invalid status. Allowed: enabled, disabled' });
+  }
+
+  const isActive = status === 'enabled' ? 1 : 0;
+
+  // Verify the beat belongs to the producer first
+  db.get(
+    `SELECT id, producer_id FROM beats WHERE id = ?`,
+    [beatId],
+    (err, beat) => {
+      if (err) return res.status(500).json({ error: 'Database error' });
+      if (!beat) return res.status(404).json({ error: 'Beat not found' });
+      if (beat.producer_id !== producerId) {
+        return res.status(403).json({ error: 'Not your beat' });
+      }
+
+      // Update the beat status
+      db.run(
+        `UPDATE beats
+         SET status = ?, is_active = ?
+         WHERE id = ?`,
+        [status, isActive, beatId],
+        function(err) {
+          if (err) return res.status(500).json({ error: 'Database error' });
+          res.json({
+            message: `Beat status updated to ${status}`
+          });
+        }
+      );
+    }
+  );
+});
+
+
 // ================================
 // ADMIN ROUTES
 // ================================
+
+
+// Create a license 
+app.post('/api/admin/licenses', authenticateToken, requireAdmin, (req, res) => {
+  const { name, description, usage_rights } = req.body;
+
+  if (!name) {
+    return res.status(400).json({ error: 'License name is required' });
+  }
+
+  db.run(
+    `INSERT INTO licenses (name, description, usage_rights)
+     VALUES (?, ?, ?)`,
+    [name, description || '', usage_rights || ''],
+    function (err) {
+      if (err) {
+        if (err.message.includes('UNIQUE')) {
+          return res.status(400).json({ error: 'License name must be unique' });
+        }
+        return res.status(500).json({ error: 'Failed to create license' });
+      }
+
+      res.status(201).json({
+        message: 'License created successfully',
+        license_id: this.lastID
+      });
+    }
+  );
+});
+
+// Update a license 
+app.put('/api/admin/licenses/:id', authenticateToken, requireAdmin, (req, res) => {
+  const licenseId = Number(req.params.id);
+  const { name, description, usage_rights } = req.body;
+
+  if (!licenseId) {
+    return res.status(400).json({ error: 'License ID is required' });
+  }
+
+  // Check if the license is linked to any beat
+  db.get(
+    `SELECT 1 FROM beat_licenses WHERE license_id = ? LIMIT 1`,
+    [licenseId],
+    (err, row) => {
+      if (err) return res.status(500).json({ error: 'Database error' });
+      if (row) {
+        return res.status(400).json({ error: 'Cannot update license already used by a beat' });
+      }
+
+      db.run(
+        `UPDATE licenses
+         SET name = COALESCE(?, name),
+             description = COALESCE(?, description),
+             usage_rights = COALESCE(?, usage_rights)
+         WHERE id = ?`,
+        [name, description, usage_rights, licenseId],
+        function (err) {
+          if (err) return res.status(500).json({ error: 'Failed to update license' });
+          if (this.changes === 0) return res.status(404).json({ error: 'License not found' });
+
+          res.json({ message: 'License updated successfully' });
+        }
+      );
+    }
+  );
+});
+
+// View all licenses
+app.get('/api/admin/licenses', authenticateToken, requireAdmin, (req, res) => {
+  db.all(
+    `SELECT id, name, description, usage_rights, created_at
+     FROM licenses
+     ORDER BY created_at DESC`,
+    [],
+    (err, rows) => {
+      if (err) return res.status(500).json({ error: 'Database error' });
+      res.json(rows);
+    }
+  );
+});
+
 // View all beats (including hidden/problematic ones)
-// Get all beats for admin view
 app.get('/api/admin/beats', authenticateToken, requireAdmin, (req, res) => {
   const query = `
     SELECT id, producer_id, title, genre, tempo, duration, preview_url, full_url, created_at, is_active
@@ -882,137 +1284,49 @@ app.get('/api/admin/beats', authenticateToken, requireAdmin, (req, res) => {
 // Disable / enable a beat (soft moderation)
 app.put('/api/admin/beats/:id/status', authenticateToken, requireAdmin, (req, res) => {
   const beatId = req.params.id;
-  const { is_active } = req.body; // true or false
+  const { status } = req.body;
 
-  // Determine numeric flag and status string
-  const isActiveFlag = is_active ? 1 : 0;
-  const statusString = is_active ? 'enabled' : 'disabled';
+  const allowedStatuses = ['enabled', 'disabled', 'under_review', 'banned'];
+
+  if (!allowedStatuses.includes(status)) {
+    return res.status(400).json({ error: 'Invalid status' });
+  }
+
+  const isActive = status === 'enabled' ? 1 : 0;
 
   db.run(
-    'UPDATE beats SET is_active = ?, status = ? WHERE id = ?',
-    [isActiveFlag, statusString, beatId],
+    `
+    UPDATE beats
+    SET 
+      status = ?,
+      is_active = ?,
+      dispute_status = CASE
+        WHEN ? IN ('under_review', 'banned') THEN ?
+        ELSE dispute_status
+      END
+    WHERE id = ?
+    `,
+    [status, isActive, status, status, beatId],
     function (err) {
-      if (err) {
-        return res.status(500).json({ error: 'Database error' });
-      }
-
-      if (this.changes === 0) {
-        return res.status(404).json({ message: 'Beat not found' });
-      }
+      if (err) return res.status(500).json({ error: 'Database error' });
+      if (this.changes === 0) return res.status(404).json({ error: 'Beat not found' });
 
       res.json({
-        message: `Beat ${statusString}`
+        message: `Beat status updated to ${status}`
       });
     }
   );
 });
 
-// GET admin payouts (pending OR all)
-app.get('/api/admin/payouts', authenticateToken, requireAdmin, (req, res) => {
-  const { status } = req.query; // optional: pending | approved
-
-  let query = `
-    SELECT *
-    FROM purchases
-  `;
-  const params = [];
-
-  if (status) {
-    query += ' WHERE payout_status = ?';
-    params.push(status);
-  }
-
-  db.all(query, params, (err, rows) => {
-    if (err) {
-      console.error(err);
-      return res.status(500).json({ error: 'Database error' });
-    }
-
-    res.json(rows);
-  });
-});
-
-// Admin approves payout
-// app.put('/api/admin/payouts/:id/approve', authenticateToken, requireAdmin, (req, res) => {
-//   const payoutId = req.params.id;
-
-//   db.run(
-//     `
-//     UPDATE purchases
-//     SET payout_status = 'approved',
-//         paid_at = CURRENT_TIMESTAMP
-//     WHERE id = ?
-//     `,
-//     [payoutId],
-//     function (err) {
-//       if (err) {
-//         console.error(err);
-//         return res.status(500).json({ error: 'Database error' });
-//       }
-
-//       if (this.changes === 0) {
-//         return res.status(404).json({ error: 'Payout not found' });
-//       }
-
-//       res.json({ message: 'Payout approved' });
-//     }
-//   );
-// });
-
-// Admin rejects a producer withdrawal request
-// app.put('/api/admin/payouts/:id/reject', authenticateToken, requireAdmin, (req, res) => {
-//     const withdrawalId = req.params.id;
-//     const { reason } = req.body; // optional reason for rejection
-
-//     // 1️⃣ Check if withdrawal exists and is pending
-//     db.get(
-//       `SELECT * FROM withdrawals WHERE id = ?`,
-//       [withdrawalId],
-//       (err, withdrawal) => {
-//         if (err) {
-//           console.error('DB ERROR:', err.message);
-//           return res.status(500).json({ error: 'Database error' });
-//         }
-
-//         if (!withdrawal) {
-//           return res.status(404).json({ error: 'Withdrawal not found' });
-//         }
-
-//         if (withdrawal.status !== 'pending') {
-//           return res
-//             .status(400)
-//             .json({ error: `Cannot reject a withdrawal with status '${withdrawal.status}'` });
-//         }
-
-//         // 2️⃣ Update status to rejected
-//         db.run(
-//           `UPDATE withdrawals SET status = 'rejected', reason = ? WHERE id = ?`,
-//           [reason || null, withdrawalId],
-//           function (err) {
-//             if (err) {
-//               console.error('DB ERROR:', err.message);
-//               return res.status(500).json({ error: 'Database error' });
-//             }
-
-//             res.json({
-//               message: 'Withdrawal rejected',
-//               withdrawal_id: withdrawalId,
-//               reason: reason || null
-//             });
-//           }
-//         );
-//       }
-//     );
-//   }
-// );
-
-// Admin views withdrawal requests
+// Admin views all withdrawal
 app.get('/api/admin/withdrawals', authenticateToken, requireAdmin, (req, res) => {
   db.all(
-    `SELECT w.*, u.email AS producer_email
-     FROM withdrawals w
-     JOIN users u ON w.producer_id = u.id
-     ORDER BY requested_at DESC`,
+    `
+    SELECT w.*, u.email AS producer_email
+    FROM withdrawals w
+    JOIN users u ON w.producer_id = u.id
+    ORDER BY w.created_at DESC
+    `,
     [],
     (err, rows) => {
       if (err) return res.status(500).json({ error: 'Database error' });
@@ -1021,109 +1335,105 @@ app.get('/api/admin/withdrawals', authenticateToken, requireAdmin, (req, res) =>
   );
 });
 
-// Admin approves a producer withdrawal
-app.put('/api/admin/withdrawals/:id/approve', authenticateToken, requireAdmin, (req, res) => {
-  const withdrawalId = req.params.id;
+// Admin approves a producer withdrawal (if flagged and reviewed)
+app.put('/api/admin/purchases/:id/resolve', authenticateToken, requireAdmin, (req, res) => {
+  const purchaseId = Number(req.params.id);
+  const { action, note } = req.body; // action: 'approve' or 'reject'
 
-  // 1️⃣ Get withdrawal details
+  if (!['approve', 'reject'].includes(action)) {
+    return res.status(400).json({ error: 'Invalid action. Must be "approve" or "reject".' });
+  }
+
+  // 1️⃣ Fetch the disputed purchase
   db.get(
-    `SELECT id, producer_id, amount, status
-     FROM withdrawals
-     WHERE id = ?`,
-    [withdrawalId],
-    (err, withdrawal) => {
+    `SELECT * FROM purchases WHERE id = ? AND refund_status = 'disputed'`,
+    [purchaseId],
+    (err, purchase) => {
       if (err) return res.status(500).json({ error: 'Database error' });
-      if (!withdrawal) return res.status(404).json({ error: 'Withdrawal not found' });
-      if (withdrawal.status !== 'pending') {
-        return res.status(400).json({ error: 'Withdrawal already processed' });
+      if (!purchase) return res.status(404).json({ error: 'Disputed purchase not found' });
+
+      // 2️⃣ Determine new refund_status and hold_until
+      let newStatus;
+      let holdUntil = null;
+
+      if (action === 'approve') {
+        // Approved dispute: payout stays on hold until resolved manually or refunded
+        newStatus = 'on_hold';
+        holdUntil = purchase.hold_until || new Date().toISOString(); 
+      } else {
+        // Rejected dispute: payout can proceed
+        newStatus = 'none';
       }
 
-      // 2️⃣ Update withdrawal status to 'approved'
+      // 3️⃣ Update purchase record
       db.run(
-        `UPDATE withdrawals
-         SET status = 'approved', processed_at = CURRENT_TIMESTAMP
+        `UPDATE purchases
+         SET refund_status = ?, hold_until = ?, admin_note = ?
          WHERE id = ?`,
-        [withdrawalId],
+        [newStatus, holdUntil, note || null, purchaseId],
         function(err) {
-          if (err) return res.status(500).json({ error: 'Failed to update withdrawal' });
+          if (err) return res.status(500).json({ error: 'Failed to resolve dispute' });
 
-          // 3️⃣ Fetch pending purchases for this producer
-          db.all(
-            `SELECT id, price - commission AS net
-             FROM purchases
-             WHERE payout_status = 'pending'
-               AND beat_id IN (
-                 SELECT id FROM beats WHERE producer_id = ?
-               )
-             ORDER BY purchased_at ASC`,
-            [withdrawal.producer_id],
-            (err, purchases) => {
-              if (err) return res.status(500).json({ error: 'Database error fetching purchases' });
-
-              let remaining = withdrawal.amount;
-              const toUpdateIds = [];
-
-              for (const p of purchases) {
-                if (remaining <= 0) break;
-                toUpdateIds.push(p.id);
-                remaining -= p.net;
-              }
-
-              if (toUpdateIds.length === 0) {
-                return res.json({
-                  message: 'Withdrawal approved but no pending purchases to pay',
-                  withdrawal_id: withdrawalId,
-                  purchases_updated: 0
-                });
-              }
-
-              const placeholders = toUpdateIds.map(() => '?').join(',');
-
-              // 4️⃣ Update purchases as paid
-              db.run(
-                `UPDATE purchases
-                 SET payout_status = 'paid', paid_at = CURRENT_TIMESTAMP
-                 WHERE id IN (${placeholders})`,
-                toUpdateIds,
-                function(err) {
-                  if (err) return res.status(500).json({ error: 'Failed to update purchases' });
-
-                  res.json({
-                    message: 'Withdrawal approved and purchases paid',
-                    withdrawal_id: withdrawalId,
-                    purchases_updated: this.changes
-                  });
-                }
-              );
-            }
-          );
+          res.json({
+            message: `Purchase dispute ${action}d successfully`,
+            purchase_id: purchaseId,
+            new_status: newStatus,
+            admin_note: note || null
+          });
         }
       );
     }
   );
 });
 
-// Admin rejects withdrawal
-app.put('/api/admin/withdrawals/:id/reject', authenticateToken, requireAdmin, (req, res) => {
-  const withdrawalId = req.params.id;
+// Sales Dashboard
+app.get('/api/admin/sales', authenticateToken, requireAdmin, (req, res) => {
+  const query = `
+    SELECT
+      p.id AS purchase_id,
+      b.id AS beat_id,
+      b.title AS beat_title,
+      u.email AS buyer_email,
+      l.name AS license_name,
+      l.price,
+      p.commission,
+      p.created_at AS purchased_at
+    FROM purchases p
+    JOIN beats b ON p.beat_id = b.id
+    JOIN users u ON p.buyer_id = u.id
+    JOIN licenses l ON p.license_id = l.id
+    WHERE b.producer_id = ?
+    ORDER BY p.created_at DESC
+  `;
 
-  db.run(
-    `
-    UPDATE withdrawals
-    SET status = 'rejected', processed_at = CURRENT_TIMESTAMP
-    WHERE id = ? AND status = 'pending'
-    `,
-    [withdrawalId],
-    function (err) {
-      if (err) return res.status(500).json({ error: 'Database error' });
-
-      if (this.changes === 0) {
-        return res.status(404).json({ error: 'Withdrawal not found or already processed' });
-      }
-
-      res.json({ message: 'Withdrawal rejected' });
+  db.all('SELECT * FROM purchases', [], (err, rows) => {
+    if (err) {
+      console.error('PURCHASES QUERY ERROR:', err.message);
+      return res.status(500).json({ error: 'Database error' });
     }
-  );
+    res.json(rows);
+  });
+
+});
+
+// Sales Summary
+app.get('/api/admin/sales/summary', authenticateToken, requireAdmin, (req, res) => {
+  const query = `
+    SELECT 
+      COUNT(p.id) AS total_sales,
+      COALESCE(SUM(p.price), 0) AS gross_revenue,
+      COALESCE(SUM(p.commission), 0) AS total_commission,
+      COALESCE(SUM(p.price - p.commission), 0) AS net_earnings
+    FROM purchases p
+  `;
+
+  db.get(query, [], (err, row) => {
+    if (err) {
+      console.error('SALES SUMMARY ERROR:', err.message);
+      return res.status(500).json({ error: 'Database error' });
+    }
+    res.json(row);
+  });
 });
 
 // Admin platform analytics
@@ -1157,6 +1467,9 @@ app.get('/api/admin/analytics', authenticateToken, requireAdmin, (req, res) => {
     });
   });
 });
+
+
+
 
 // Start server
 app.listen(PORT, () => {
