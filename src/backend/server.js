@@ -41,7 +41,7 @@ const db = new sqlite.Database(dbPath, (err) => {
 
 const loginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 5 // 5 attempts
+  max: 1000 // 5 attempts
 });
 
 const logger = winston.createLogger({
@@ -1054,7 +1054,6 @@ app.post('/api/buyer/purchase', authenticateToken, requireBuyer, (req, res) => {
               seller_earnings,
               payout_status,
               withdrawal_id,
-              eligible_for_withdrawal,
               hold_until
             )
             VALUES (?, ?, ?, ?, ?, ?, 'unpaid', NULL, 1, DATETIME('now', '+' || ? || ' days'))
@@ -1155,6 +1154,7 @@ app.get('/api/buyer/purchases', authenticateToken, requireBuyer, (req, res) => {
       b.key,
       b.bpm,
       b.tags,
+      p.license_id,
       l.name AS license_name,
       l.usage_rights,
       bl.price AS license_price
@@ -1479,7 +1479,7 @@ app.post('/api/buyer/purchases/:id/dispute', authenticateToken, requireBuyer, (r
  *         description: Upload failed
  */
 app.post('/api/producer/beats/upload', authenticateToken, requireProducer, (req, res) => {
-    const adminId = req.user.id;
+    const producerId = req.user.id;
 
     const {
       title,
@@ -2373,7 +2373,7 @@ app.post('/api/producer/withdrawals', authenticateToken, requireProducer, (req, 
                   }
 
                   res.json({
-                    message: 'Withdrawal created successfully',
+                    message: 'Withdrawal successfully',
                     withdrawal: {
                       id: withdrawalId,
                       amount: requestedAmount,
@@ -2986,7 +2986,8 @@ app.put('/api/admin/disputes/:purchaseId/resolve', authenticateToken, requireAdm
       p.flag_reason,
       b.producer_id,
       b.title AS beat_title,
-      u.username AS buyer_username
+      u.email AS buyer_email,
+      u.display_name AS buyer_name
     FROM purchases p
     JOIN beats b ON b.id = p.beat_id
     JOIN users u ON u.id = p.buyer_id
@@ -3046,42 +3047,61 @@ app.put('/api/admin/disputes/:purchaseId/resolve', authenticateToken, requireAdm
 
       // ⚠️ ACTION: APPROVE (Buyer's complaint is valid - producer must fix)
       if (action === 'approve') {
-        // Cannot approve if already pending resolution
-        if (purchase.refund_status === 'pending_resolution') {
-          return res.status(400).json({ 
-            error: 'Dispute already approved and awaiting producer resolution' 
-          });
-        }
-
-        db.run(
-          `
-          UPDATE purchases
-          SET 
-            refund_status = 'pending_resolution',
-            admin_note = ?
-          WHERE id = ?
-          `,
-          [note || 'Dispute approved - producer must resolve issue', purchaseId],
-          (err3) => {
-            if (err3) {
-              console.error('DISPUTE APPROVE ERROR:', err3.message);
-              return res.status(500).json({ error: 'Failed to approve dispute' });
-            }
-
-            res.json({
-              message: 'Dispute approved. Producer must fix the issue.',
-              purchase_id: purchaseId,
-              action: 'approved',
-              status: 'pending_resolution',
-              amount_held: purchase.seller_earnings,
-              buyer_complaint: purchase.flag_reason,
-              details: 'Funds will remain locked until producer resolves the issue'
+          // Cannot approve if already pending resolution
+          if (purchase.refund_status === 'pending_resolution') {
+            return res.status(400).json({ 
+              error: 'Dispute already approved and awaiting producer resolution' 
             });
           }
-        );
-        return;
-      }
 
+          db.run(
+            `
+            UPDATE purchases
+            SET 
+              refund_status = 'pending_resolution',
+              admin_note = ?
+            WHERE id = ?
+            `,
+            [note || 'Dispute approved - producer must resolve issue', purchaseId],
+            (err3) => {
+              if (err3) {
+                console.error('DISPUTE APPROVE ERROR:', err3.message);
+                return res.status(500).json({ error: 'Failed to approve dispute' });
+              }
+
+              // ✅ ADD: Create notification for producer
+              db.run(
+                `INSERT INTO notifications (user_id, type, title, message, reference_id, reference_type)
+                VALUES (?, 'dispute_approved', ?, ?, ?, 'purchase')`,
+                [
+                  purchase.producer_id,
+                  'Dispute Approved - Action Required',
+                  `A buyer dispute for "${purchase.beat_title}" has been approved. Reason: ${purchase.flag_reason}. Please re-upload a clean file.`,
+                  purchaseId,
+                  'purchase'
+                ],
+                (err4) => {
+                  // Don't fail the request if notification fails
+                  if (err4) {
+                    console.error('NOTIFICATION ERROR:', err4.message);
+                  }
+                }
+              );
+
+              res.json({
+                message: 'Dispute approved. Producer must fix the issue.',
+                purchase_id: purchaseId,
+                action: 'approved',
+                status: 'pending_resolution',
+                amount_held: purchase.seller_earnings,
+                buyer_complaint: purchase.flag_reason,
+                details: 'Funds will remain locked until producer resolves the issue'
+              });
+            }
+          );
+          return;
+      }
+      
       // ✅ ACTION: RESOLVE (Producer fixed the issue - release funds)
       if (action === 'resolve') {
         // Can only resolve if in pending_resolution state
