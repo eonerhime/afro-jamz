@@ -114,6 +114,10 @@ app.use(loginLimiter);
 
 console.log(db);
 
+// ==========================================
+// HELPER FUNCTIONS
+// ==========================================
+
 // Initialize database tables
 function initializeDatabase() {
   db.serialize(() => {
@@ -227,6 +231,28 @@ function validateRegistration(req, res, next) {
   next();
 }
 
+// ==========================================
+// NOTIFICATION HELPER
+// ==========================================
+
+function createNotification(userId, type, title, message, referenceId, referenceType) {
+  return new Promise((resolve, reject) => {
+    db.run(
+      `INSERT INTO notifications (user_id, type, title, message, reference_id, reference_type)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      [userId, type, title, message, referenceId, referenceType],
+      function (err) {
+        if (err) {
+          console.error('NOTIFICATION CREATE ERROR:', err.message);
+          reject(err);
+        } else {
+          console.log(`✅ Notification created for user ${userId}: ${type}`);
+          resolve(this.lastID);
+        }
+      }
+    );
+  });
+}
 // ==========================================
 // AUTHENTICATION ROUTES
 // ==========================================
@@ -1357,7 +1383,10 @@ app.post('/api/buyer/purchases/:id/dispute', authenticateToken, requireBuyer, (r
   }
 
   db.get(
-    `SELECT id, refund_status, withdrawal_id FROM purchases WHERE id = ? AND buyer_id = ?`,
+    `SELECT p.id, p.refund_status, p.withdrawal_id, b.id AS beat_id, b.title AS beat_title, b.producer_id
+     FROM purchases p
+     JOIN beats b ON b.id = p.beat_id
+     WHERE p.id = ? AND p.buyer_id = ?`,
     [purchaseId, buyerId],
     (err, purchase) => {
       if (err) return res.status(500).json({ error: 'Database error' });
@@ -1371,25 +1400,44 @@ app.post('/api/buyer/purchases/:id/dispute', authenticateToken, requireBuyer, (r
         return res.status(400).json({ error: 'Refunded purchase cannot be disputed' });
       }
 
-      // ✅ Cannot dispute already-withdrawn purchases
       if (purchase.withdrawal_id !== null) {
         return res.status(400).json({ error: 'Cannot dispute a purchase that has already been withdrawn' });
       }
 
-      // Flag as disputed (hold_until keeps original value, dispute status blocks withdrawal)
+      // Flag as disputed
       db.run(
-        `
-        UPDATE purchases
-        SET
-          refund_status = 'disputed',
-          flag_reason = ?
-        WHERE id = ? AND buyer_id = ?
-        `,
+        `UPDATE purchases
+         SET refund_status = 'disputed', flag_reason = ?
+         WHERE id = ? AND buyer_id = ?`,
         [reason, purchaseId, buyerId],
-        function (err2) {
+        async function (err2) {
           if (err2) {
             console.error('DISPUTE UPDATE ERROR:', err2.message);
             return res.status(500).json({ error: 'Failed to flag dispute' });
+          }
+
+          // ✅ NOTIFY ALL ADMINS
+          try {
+            const admins = await new Promise((resolve, reject) => {
+              db.all(`SELECT id FROM users WHERE role = 'admin'`, [], (err, rows) => {
+                if (err) reject(err);
+                else resolve(rows);
+              });
+            });
+
+            for (const admin of admins) {
+              await createNotification(
+                admin.id,
+                'dispute_filed',
+                'New Dispute Filed',
+                `Buyer filed dispute for purchase #${purchaseId} (${purchase.beat_title}). Reason: ${reason}`,
+                purchaseId,
+                'purchase'
+              );
+            }
+          } catch (notifErr) {
+            console.error('Admin notification failed:', notifErr.message);
+            // Don't fail the request
           }
 
           res.status(200).json({
@@ -2967,18 +3015,16 @@ app.put('/api/admin/disputes/:purchaseId/resolve', authenticateToken, requireAdm
   const purchaseId = Number(req.params.purchaseId);
   const { action, note } = req.body;
 
-  // ✅ Three possible actions
   if (!['reject', 'approve', 'resolve'].includes(action)) {
     return res.status(400).json({ 
       error: 'Invalid action. Use "reject", "approve", or "resolve"' 
     });
   }
 
-  // 1️⃣ Fetch disputed purchase
   db.get(
-    `
-    SELECT 
+    `SELECT 
       p.id,
+      p.buyer_id,
       p.seller_earnings,
       p.payout_status,
       p.refund_status,
@@ -2992,10 +3038,9 @@ app.put('/api/admin/disputes/:purchaseId/resolve', authenticateToken, requireAdm
     JOIN beats b ON b.id = p.beat_id
     JOIN users u ON u.id = p.buyer_id
     WHERE p.id = ?
-      AND (p.refund_status = 'disputed' OR p.refund_status = 'pending_resolution')
-    `,
+      AND (p.refund_status = 'disputed' OR p.refund_status = 'pending_resolution')`,
     [purchaseId],
-    (err, purchase) => {
+    async (err, purchase) => {
       if (err) {
         console.error('DISPUTE FETCH ERROR:', err.message);
         return res.status(500).json({ error: 'Database error' });
@@ -3007,104 +3052,126 @@ app.put('/api/admin/disputes/:purchaseId/resolve', authenticateToken, requireAdm
         });
       }
 
-      // Already withdrawn? Cannot modify
       if (purchase.withdrawal_id !== null) {
         return res.status(400).json({ 
           error: 'This purchase has already been withdrawn and cannot be modified' 
         });
       }
 
-      // ❌ ACTION: REJECT (Buyer's complaint is invalid)
+      // ❌ ACTION: REJECT
       if (action === 'reject') {
         db.run(
-          `
-          UPDATE purchases
-          SET 
-            refund_status = 'none',
-            flag_reason = NULL,
-            hold_until = NULL,
-            admin_note = ?
-          WHERE id = ?
-          `,
+          `UPDATE purchases
+           SET refund_status = 'none', flag_reason = NULL, hold_until = NULL, admin_note = ?
+           WHERE id = ?`,
           [note || 'Dispute rejected - no valid reason found', purchaseId],
-          (err2) => {
+          async (err2) => {
             if (err2) {
               console.error('DISPUTE REJECT ERROR:', err2.message);
               return res.status(500).json({ error: 'Failed to reject dispute' });
+            }
+
+            // ✅ NOTIFY BUYER (dispute rejected)
+            try {
+              await createNotification(
+                purchase.buyer_id,
+                'dispute_rejected',
+                'Dispute Rejected',
+                `Your dispute for "${purchase.beat_title}" was rejected. ${note || 'No valid reason found.'}`,
+                purchaseId,
+                'purchase'
+              );
+            } catch (notifErr) {
+              console.error('Buyer notification failed:', notifErr.message);
+            }
+
+            // ✅ NOTIFY PRODUCER (funds released)
+            try {
+              await createNotification(
+                purchase.producer_id,
+                'dispute_rejected',
+                'Dispute Dismissed - Funds Released',
+                `Dispute for "${purchase.beat_title}" was dismissed. $${purchase.seller_earnings} is now available for withdrawal.`,
+                purchaseId,
+                'purchase'
+              );
+            } catch (notifErr) {
+              console.error('Producer notification failed:', notifErr.message);
             }
 
             res.json({
               message: 'Dispute rejected. Funds released to producer.',
               purchase_id: purchaseId,
               action: 'rejected',
-              amount_released: purchase.seller_earnings,
-              details: 'Producer can now withdraw these funds normally'
+              amount_released: purchase.seller_earnings
             });
           }
         );
         return;
       }
 
-      // ⚠️ ACTION: APPROVE (Buyer's complaint is valid - producer must fix)
+      // ⚠️ ACTION: APPROVE
       if (action === 'approve') {
-          // Cannot approve if already pending resolution
-          if (purchase.refund_status === 'pending_resolution') {
-            return res.status(400).json({ 
-              error: 'Dispute already approved and awaiting producer resolution' 
+        if (purchase.refund_status === 'pending_resolution') {
+          return res.status(400).json({ 
+            error: 'Dispute already approved and awaiting producer resolution' 
+          });
+        }
+
+        db.run(
+          `UPDATE purchases
+           SET refund_status = 'pending_resolution', admin_note = ?
+           WHERE id = ?`,
+          [note || 'Dispute approved - producer must resolve issue', purchaseId],
+          async (err3) => {
+            if (err3) {
+              console.error('DISPUTE APPROVE ERROR:', err3.message);
+              return res.status(500).json({ error: 'Failed to approve dispute' });
+            }
+
+            // ✅ NOTIFY PRODUCER (must fix)
+            try {
+              await createNotification(
+                purchase.producer_id,
+                'dispute_approved',
+                '⚠️ Action Required: Dispute Approved',
+                `A dispute for "${purchase.beat_title}" has been approved. Issue: ${purchase.flag_reason}. You must resolve this issue. $${purchase.seller_earnings} is on hold.`,
+                purchaseId,
+                'purchase'
+              );
+            } catch (notifErr) {
+              console.error('Producer notification failed:', notifErr.message);
+            }
+
+            // ✅ NOTIFY BUYER (approved)
+            try {
+              await createNotification(
+                purchase.buyer_id,
+                'dispute_approved',
+                'Dispute Approved',
+                `Your dispute for "${purchase.beat_title}" has been approved. The producer has been notified to fix the issue.`,
+                purchaseId,
+                'purchase'
+              );
+            } catch (notifErr) {
+              console.error('Buyer notification failed:', notifErr.message);
+            }
+
+            res.json({
+              message: 'Dispute approved. Producer notified to fix the issue.',
+              purchase_id: purchaseId,
+              action: 'approved',
+              status: 'pending_resolution',
+              amount_held: purchase.seller_earnings,
+              buyer_complaint: purchase.flag_reason
             });
           }
-
-          db.run(
-            `
-            UPDATE purchases
-            SET 
-              refund_status = 'pending_resolution',
-              admin_note = ?
-            WHERE id = ?
-            `,
-            [note || 'Dispute approved - producer must resolve issue', purchaseId],
-            (err3) => {
-              if (err3) {
-                console.error('DISPUTE APPROVE ERROR:', err3.message);
-                return res.status(500).json({ error: 'Failed to approve dispute' });
-              }
-
-              // ✅ ADD: Create notification for producer
-              db.run(
-                `INSERT INTO notifications (user_id, type, title, message, reference_id, reference_type)
-                VALUES (?, 'dispute_approved', ?, ?, ?, 'purchase')`,
-                [
-                  purchase.producer_id,
-                  'Dispute Approved - Action Required',
-                  `A buyer dispute for "${purchase.beat_title}" has been approved. Reason: ${purchase.flag_reason}. Please re-upload a clean file.`,
-                  purchaseId,
-                  'purchase'
-                ],
-                (err4) => {
-                  // Don't fail the request if notification fails
-                  if (err4) {
-                    console.error('NOTIFICATION ERROR:', err4.message);
-                  }
-                }
-              );
-
-              res.json({
-                message: 'Dispute approved. Producer must fix the issue.',
-                purchase_id: purchaseId,
-                action: 'approved',
-                status: 'pending_resolution',
-                amount_held: purchase.seller_earnings,
-                buyer_complaint: purchase.flag_reason,
-                details: 'Funds will remain locked until producer resolves the issue'
-              });
-            }
-          );
-          return;
+        );
+        return;
       }
-      
-      // ✅ ACTION: RESOLVE (Producer fixed the issue - release funds)
+
+      // ✅ ACTION: RESOLVE
       if (action === 'resolve') {
-        // Can only resolve if in pending_resolution state
         if (purchase.refund_status !== 'pending_resolution') {
           return res.status(400).json({ 
             error: 'This purchase is not in pending_resolution state. Approve the dispute first.' 
@@ -3112,28 +3179,49 @@ app.put('/api/admin/disputes/:purchaseId/resolve', authenticateToken, requireAdm
         }
 
         db.run(
-          `
-          UPDATE purchases
-          SET 
-            refund_status = 'none',
-            flag_reason = NULL,
-            hold_until = NULL,
-            admin_note = ?
-          WHERE id = ?
-          `,
+          `UPDATE purchases
+           SET refund_status = 'none', flag_reason = NULL, hold_until = NULL, admin_note = ?
+           WHERE id = ?`,
           [note || 'Issue resolved - funds released', purchaseId],
-          (err4) => {
+          async (err4) => {
             if (err4) {
               console.error('DISPUTE RESOLVE ERROR:', err4.message);
               return res.status(500).json({ error: 'Failed to resolve dispute' });
+            }
+
+            // ✅ NOTIFY PRODUCER (resolved - funds released)
+            try {
+              await createNotification(
+                purchase.producer_id,
+                'dispute_resolved',
+                '✅ Dispute Resolved - Funds Released',
+                `The dispute for "${purchase.beat_title}" has been resolved. $${purchase.seller_earnings} is now available for withdrawal.`,
+                purchaseId,
+                'purchase'
+              );
+            } catch (notifErr) {
+              console.error('Producer notification failed:', notifErr.message);
+            }
+
+            // ✅ NOTIFY BUYER (resolved)
+            try {
+              await createNotification(
+                purchase.buyer_id,
+                'dispute_resolved',
+                'Dispute Resolved',
+                `The dispute for "${purchase.beat_title}" has been resolved. Thank you for your patience.`,
+                purchaseId,
+                'purchase'
+              );
+            } catch (notifErr) {
+              console.error('Buyer notification failed:', notifErr.message);
             }
 
             res.json({
               message: 'Dispute resolved. Funds released to producer.',
               purchase_id: purchaseId,
               action: 'resolved',
-              amount_released: purchase.seller_earnings,
-              details: 'Producer can now withdraw these funds normally'
+              amount_released: purchase.seller_earnings
             });
           }
         );
@@ -3325,6 +3413,198 @@ app.get('/api/admin/analytics', authenticateToken, requireAdmin, (req, res) => {
   });
 });
 
+
+// ==========================================
+// NOTIFICATIONS ROUTES
+// ==========================================
+
+// ==========================================
+// GET NOTIFICATIONS (ALL USERS)
+// ==========================================
+
+/**
+ * @swagger
+ * /api/notifications:
+ *   get:
+ *     summary: Get all notifications for logged-in user
+ *     tags: [Notifications]
+ *     security:
+ *       - bearerAuth: []
+ */
+app.get('/api/notifications', authenticateToken, (req, res) => {
+  const userId = req.user.id;
+
+  db.all(
+    `SELECT 
+       id,
+       type,
+       title,
+       message,
+       reference_id,
+       reference_type,
+       is_read,
+       created_at
+     FROM notifications
+     WHERE user_id = ?
+     ORDER BY created_at DESC
+     LIMIT 50`,
+    [userId],
+    (err, notifications) => {
+      if (err) {
+        console.error('NOTIFICATIONS FETCH ERROR:', err.message);
+        return res.status(500).json({ error: 'Database error' });
+      }
+
+      // Count unread
+      const unread = notifications.filter(n => n.is_read === 0).length;
+
+      res.json({
+        notifications,
+        unread_count: unread
+      });
+    }
+  );
+});
+
+// ==========================================
+// 5. MARK NOTIFICATION AS READ
+// ==========================================
+
+/**
+ * @swagger
+ * /api/notifications/{id}/read:
+ *   put:
+ *     summary: Mark notification as read
+ *     tags: [Notifications]
+ *     security:
+ *       - bearerAuth: []
+ */
+app.put('/api/notifications/:id/read', authenticateToken, (req, res) => {
+  const notificationId = Number(req.params.id);
+  const userId = req.user.id;
+
+  db.run(
+    `UPDATE notifications 
+     SET is_read = 1 
+     WHERE id = ? AND user_id = ?`,
+    [notificationId, userId],
+    function (err) {
+      if (err) {
+        console.error('MARK READ ERROR:', err.message);
+        return res.status(500).json({ error: 'Database error' });
+      }
+
+      if (this.changes === 0) {
+        return res.status(404).json({ error: 'Notification not found' });
+      }
+
+      res.json({ message: 'Notification marked as read' });
+    }
+  );
+});
+
+// ==========================================
+// MARK ALL NOTIFICATIONS AS READ
+// ==========================================
+
+/**
+ * @swagger
+ * /api/notifications/read-all:
+ *   put:
+ *     summary: Mark all notifications as read
+ *     tags: [Notifications]
+ *     security:
+ *       - bearerAuth: []
+ */
+app.put('/api/notifications/read-all', authenticateToken, (req, res) => {
+  const userId = req.user.id;
+
+  db.run(
+    `UPDATE notifications 
+     SET is_read = 1 
+     WHERE user_id = ? AND is_read = 0`,
+    [userId],
+    function (err) {
+      if (err) {
+        console.error('MARK ALL READ ERROR:', err.message);
+        return res.status(500).json({ error: 'Database error' });
+      }
+
+      res.json({ 
+        message: 'All notifications marked as read',
+        count: this.changes
+      });
+    }
+  );
+});
+
+// ==========================================
+// DELETE NOTIFICATION
+// ==========================================
+
+/**
+ * @swagger
+ * /api/notifications/{id}:
+ *   delete:
+ *     summary: Delete a notification
+ *     tags: [Notifications]
+ *     security:
+ *       - bearerAuth: []
+ */
+app.delete('/api/notifications/:id', authenticateToken, (req, res) => {
+  const notificationId = Number(req.params.id);
+  const userId = req.user.id;
+
+  db.run(
+    `DELETE FROM notifications 
+     WHERE id = ? AND user_id = ?`,
+    [notificationId, userId],
+    function (err) {
+      if (err) {
+        console.error('DELETE NOTIFICATION ERROR:', err.message);
+        return res.status(500).json({ error: 'Database error' });
+      }
+
+      if (this.changes === 0) {
+        return res.status(404).json({ error: 'Notification not found' });
+      }
+
+      res.json({ message: 'Notification deleted' });
+    }
+  );
+});
+
+// ==========================================
+// GET UNREAD COUNT (FOR BADGE)
+// ==========================================
+
+/**
+ * @swagger
+ * /api/notifications/unread-count:
+ *   get:
+ *     summary: Get count of unread notifications
+ *     tags: [Notifications]
+ *     security:
+ *       - bearerAuth: []
+ */
+app.get('/api/notifications/unread-count', authenticateToken, (req, res) => {
+  const userId = req.user.id;
+
+  db.get(
+    `SELECT COUNT(*) AS count
+     FROM notifications
+     WHERE user_id = ? AND is_read = 0`,
+    [userId],
+    (err, row) => {
+      if (err) {
+        console.error('UNREAD COUNT ERROR:', err.message);
+        return res.status(500).json({ error: 'Database error' });
+      }
+
+      res.json({ unread_count: row.count });
+    }
+  );
+});
 
 
 
