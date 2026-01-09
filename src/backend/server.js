@@ -35,9 +35,48 @@ const db = new sqlite.Database(dbPath, (err) => {
     console.error('Error opening database:', err.message);
   } else {
     console.log('Connected to SQLite database.', dbPath);
+    
+    // ==========================================
+    // SQLITE PERFORMANCE OPTIMIZATIONS
+    // ==========================================
+    
+    // Enable Write-Ahead Logging (critical for concurrency)
+    db.run('PRAGMA journal_mode = WAL', (err) => {
+      if (err) {
+        console.error('⚠️  WAL mode error:', err.message);
+      } else {
+        console.log('✅ SQLite WAL mode enabled (better concurrency)');
+      }
+    });
+    
+    // Increase cache size (uses more RAM but much faster)
+    db.run('PRAGMA cache_size = -64000', (err) => {
+      if (!err) console.log('✅ Cache size set to 64MB');
+    });
+    
+    // Enable foreign key constraints
+    db.run('PRAGMA foreign_keys = ON', (err) => {
+      if (!err) console.log('✅ Foreign keys enabled');
+    });
+    
+    // Optimize for speed (normal synchronization is safe enough)
+    db.run('PRAGMA synchronous = NORMAL', (err) => {
+      if (!err) console.log('✅ Synchronous mode: NORMAL');
+    });
+    
+    // Store temp tables in memory for speed
+    db.run('PRAGMA temp_store = MEMORY', (err) => {
+      if (!err) console.log('✅ Temp store: MEMORY');
+    });
+    
+    console.log('🚀 SQLite optimizations complete');
+    
+    // Initialize database tables
     initializeDatabase();
   }
 });
+
+console.log(db);
 
 const loginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
@@ -111,8 +150,6 @@ app.use(helmet());
 app.use(morgan('combined'));
 app.use(loginLimiter);
 
-
-console.log(db);
 
 // ==========================================
 // HELPER FUNCTIONS
@@ -1036,71 +1073,109 @@ app.post('/api/buyer/purchase', authenticateToken, requireBuyer, (req, res) => {
     return res.status(400).json({ error: 'Missing required fields' });
   }
 
-  // STEP 1: Validate beat
+  // ✅ STEP 1: Check if buyer already owns this beat with this license
   db.get(
-    `SELECT id, producer_id, status, is_active
-     FROM beats
-     WHERE id = ?`,
-    [beat_id],
-    (err, beat) => {
-      if (err) return res.status(500).json({ error: 'Database error (beat)' });
-      if (!beat || beat.status !== 'enabled' || beat.is_active !== 1) {
-        return res.status(400).json({ error: 'Beat not available for purchase' });
+    `SELECT id FROM purchases 
+     WHERE buyer_id = ? AND beat_id = ? AND license_id = ?`,
+    [buyerId, beat_id, license_id],
+    (err, duplicate) => {
+      if (duplicate) {
+        return res.status(400).json({ 
+          error: 'You already own this beat with this license. Consider upgrading to a higher license instead.' 
+        });
       }
 
-      // STEP 2: Fetch license & price from beat_licenses
+      // ✅ STEP 2: Check if beat is exclusively sold
       db.get(
-        `
-        SELECT bl.price,
-               l.id AS license_id,
-               l.name,
-               l.usage_rights
-        FROM beat_licenses bl
-        JOIN licenses l ON bl.license_id = l.id
-        WHERE bl.beat_id = ? AND bl.license_id = ?
-        `,
-        [beat_id, license_id],
-        (err, license) => {
-          if (err) return res.status(500).json({ error: 'Database error (license)' });
-          if (!license) return res.status(400).json({ error: 'Invalid license for this beat' });
+        `SELECT p.id, l.name 
+         FROM purchases p
+         JOIN beat_licenses bl ON p.license_id = bl.license_id AND p.beat_id = bl.beat_id
+         JOIN licenses l ON bl.license_id = l.id
+         WHERE p.beat_id = ? AND l.name = 'Exclusive'`,
+        [beat_id],
+        (err2, exclusiveSale) => {
+          if (exclusiveSale) {
+            return res.status(400).json({ 
+              error: 'This beat has been exclusively licensed and is no longer available for purchase.' 
+            });
+          }
 
-          const price = license.price;
-          const commission = price * COMMISSION_RATE;
-          const seller_earnings = price - commission;
-
-          // STEP 3: Insert purchase with explicit withdrawal_id = NULL
-          db.run(
-            `
-            INSERT INTO purchases (
-              buyer_id,
-              beat_id,
-              license_id,
-              price,
-              commission,
-              seller_earnings,
-              payout_status,
-              withdrawal_id,
-              hold_until
-            )
-            VALUES (?, ?, ?, ?, ?, ?, 'unpaid', NULL, 1, DATETIME('now', '+' || ? || ' days'))
-            `,
-            [buyerId, beat_id, license.license_id, price, commission, seller_earnings, HOLD_DAYS],
-            function (err) {
-              if (err) {
-                return res.status(500).json({ error: 'Failed to create purchase', details: err.message });
+          // ✅ STEP 3: Validate beat availability
+          db.get(
+            `SELECT id, producer_id, status, is_active
+             FROM beats
+             WHERE id = ?`,
+            [beat_id],
+            (err3, beat) => {
+              if (err3) return res.status(500).json({ error: 'Database error (beat)' });
+              if (!beat || beat.status !== 'enabled' || beat.is_active !== 1) {
+                return res.status(400).json({ error: 'Beat not available for purchase' });
               }
 
-              res.status(201).json({
-                message: 'Purchase successful',
-                purchase_id: this.lastID,
-                beat_id,
-                license: {
-                  name: license.name,
-                  price: license.price,
-                  usage_rights: license.usage_rights
-                },
-                hold_until_date: `${HOLD_DAYS} days from now`
-              });
+              // ✅ STEP 4: Get license details
+              db.get(
+                `SELECT bl.price, l.id AS license_id, l.name, l.usage_rights
+                 FROM beat_licenses bl
+                 JOIN licenses l ON bl.license_id = l.id
+                 WHERE bl.beat_id = ? AND bl.license_id = ?`,
+                [beat_id, license_id],
+                (err4, license) => {
+                  if (err4) return res.status(500).json({ error: 'Database error (license)' });
+                  if (!license) return res.status(400).json({ error: 'Invalid license for this beat' });
+
+                  const price = license.price;
+                  const commission = price * COMMISSION_RATE;
+                  const seller_earnings = price - commission;
+
+                  // ✅ STEP 5: Create purchase
+                  db.run(
+                    `INSERT INTO purchases (
+                      buyer_id, beat_id, license_id, price, commission,
+                      seller_earnings, payout_status, withdrawal_id,
+                      hold_until
+                    )
+                    VALUES (?, ?, ?, ?, ?, ?, 'unpaid', NULL, DATETIME('now', '+' || ? || ' days'))`,
+                    [buyerId, beat_id, license.license_id, price, commission, seller_earnings, HOLD_DAYS],
+                    function (err5) {
+                      if (err5) {
+                        return res.status(500).json({ error: 'Failed to create purchase', details: err5.message });
+                      }
+
+                      const purchaseId = this.lastID;
+
+                      // ✅ STEP 6: If exclusive license, disable beat
+                      if (license.name === 'Exclusive') {
+                        db.run(
+                          `UPDATE beats 
+                           SET status = 'disabled', is_active = 0 
+                           WHERE id = ?`,
+                          [beat_id],
+                          (err6) => {
+                            if (err6) {
+                              console.error('Failed to disable beat after exclusive purchase:', err6.message);
+                            } else {
+                              console.log(`✅ Beat ${beat_id} disabled after exclusive purchase`);
+                            }
+                          }
+                        );
+                      }
+
+                      res.status(201).json({
+                        message: 'Purchase successful',
+                        purchase_id: purchaseId,
+                        beat_id,
+                        license: {
+                          name: license.name,
+                          price: license.price,
+                          usage_rights: license.usage_rights,
+                          exclusive: license.name === 'Exclusive'
+                        },
+                        hold_until_date: `${HOLD_DAYS} days from now`
+                      });
+                    }
+                  );
+                }
+              );
             }
           );
         }
