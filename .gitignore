@@ -1,5 +1,25 @@
 node_modules
 package-lock.json
 package.json-lock.json
-Swagger documentation.txt
-migrations
+
+# Environment
+.env
+.env.local
+
+# Logs
+logs/
+*.log
+combined.log
+error.log
+
+# Database
+db/*.db
+db/*.db-shm
+db/*.db-wal
+
+# Tests
+coverage/
+
+# IDE
+.vscode/
+.idea/

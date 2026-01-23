@@ -1,44 +1,256 @@
-import { hasPurchased } from '../db/index.js';
-import { optionalAuth } from '../middleware/auth.middleware.js';
+import express from "express";
+import { getDB } from "../db/index.js";
+import {
+  authenticateToken,
+  optionalAuth,
+} from "../middleware/auth.middleware.js";
 
-// Beat access control for purchased beats only
-router.get('/:id', optionalAuth, async (req, res) => {
+const router = express.Router();
+
+/**
+ * @swagger
+ * /api/beats:
+ *   get:
+ *     summary: Get all beats (public)
+ *     tags: [Beats]
+ *     parameters:
+ *       - in: query
+ *         name: genre
+ *         schema:
+ *           type: string
+ *       - in: query
+ *         name: search
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: List of beats
+ *       500:
+ *         description: Server error
+ */
+router.get("/", (req, res) => {
+  const { genre, search } = req.query;
+  const db = getDB();
+
+  let sql = `
+    SELECT beats.*, users.username AS producer_name
+    FROM beats
+    LEFT JOIN users ON beats.producer_id = users.id
+    WHERE beats.is_active = 1 AND beats.status = 'enabled'
+  `;
+  const params = [];
+
+  if (genre) {
+    sql += ` AND beats.genre = ?`;
+    params.push(genre);
+  }
+
+  if (search) {
+    sql += ` AND (beats.title LIKE ? OR beats.tags LIKE ?)`;
+    params.push(`%${search}%`, `%${search}%`);
+  }
+
+  sql += ` ORDER BY beats.created_at DESC`;
+
+  db.all(sql, params, (err, beats) => {
+    if (err) {
+      console.error("Database error:", err);
+      return res.status(500).json({ error: "Database error" });
+    }
+    res.json({ beats });
+  });
+});
+
+/**
+ * @swagger
+ * /api/beats/{id}:
+ *   get:
+ *     summary: Get beat details
+ *     tags: [Beats]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *     responses:
+ *       200:
+ *         description: Beat details
+ *       404:
+ *         description: Beat not found
+ */
+router.get("/:id", optionalAuth, (req, res) => {
   const beatId = req.params.id;
-  const user = req.user; // undefined if guest
+  const db = getDB();
 
   db.get(
-    `
-    SELECT beats.*, users.name AS producer_name
-    FROM beats
-    JOIN users ON beats.producer_id = users.id
-    WHERE beats.id = ?
-    `,
+    `SELECT beats.*, users.username AS producer_name
+     FROM beats
+     JOIN users ON beats.producer_id = users.id
+     WHERE beats.id = ?`,
     [beatId],
-    async (err, beat) => {
-      if (err) return res.status(500).json({ error: 'Database error' });
-      if (!beat) return res.status(404).json({ error: 'Beat not found' });
+    (err, beat) => {
+      if (err) return res.status(500).json({ error: "Database error" });
+      if (!beat) return res.status(404).json({ error: "Beat not found" });
 
-      let canAccessFull = false;
-
-      if (user) {
-        if (user.role === 'producer' && user.id === beat.producer_id) {
-          canAccessFull = true;
-        } else {
-          canAccessFull = await hasPurchased(user.id, beatId);
-        }
+      // Check if user has purchased this beat
+      if (req.user) {
+        db.get(
+          `SELECT 1 FROM purchases WHERE buyer_id = ? AND beat_id = ?`,
+          [req.user.id, beatId],
+          (err, purchase) => {
+            const hasPurchased = !!purchase;
+            res.json({
+              ...beat,
+              has_purchased: hasPurchased,
+              can_download: hasPurchased || req.user.id === beat.producer_id,
+            });
+          },
+        );
+      } else {
+        res.json({ ...beat, has_purchased: false, can_download: false });
       }
-
-      res.json({
-        id: beat.id,
-        title: beat.title,
-        genre: beat.genre,
-        tempo: beat.tempo,
-        duration: beat.duration,
-        preview_url: beat.preview_url,
-        full_url: canAccessFull ? beat.full_url : null,
-        producer_name: beat.producer_name,
-        access: canAccessFull ? 'full' : 'preview'
-      });
-    }
+    },
   );
 });
+
+/**
+ * @swagger
+ * /api/beats/{id}/download:
+ *   get:
+ *     summary: Download purchased beat
+ *     tags: [Beats]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *       - in: query
+ *         name: token
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Audio file
+ *       403:
+ *         description: Purchase required
+ *       404:
+ *         description: File not found
+ */
+router.get("/:id/download", authenticateToken, (req, res) => {
+  const beatId = req.params.id;
+  const userId = req.user.id;
+  const db = getDB();
+
+  // Verify purchase or ownership
+  db.get(
+    `SELECT beats.*, purchases.id AS purchase_id
+     FROM beats
+     LEFT JOIN purchases ON purchases.beat_id = beats.id AND purchases.buyer_id = ?
+     WHERE beats.id = ?`,
+    [userId, beatId],
+    (err, beat) => {
+      if (err) return res.status(500).json({ error: "Database error" });
+      if (!beat) return res.status(404).json({ error: "Beat not found" });
+
+      // Check if user owns the beat (producer) or has purchased it
+      const isOwner = beat.producer_id === userId;
+      const hasPurchased = !!beat.purchase_id;
+
+      if (!isOwner && !hasPurchased) {
+        return res
+          .status(403)
+          .json({ error: "You must purchase this beat to download it" });
+      }
+
+      // Send file
+      const filePath = path.join(__dirname, "..", beat.audio_file_path);
+
+      if (!fs.existsSync(filePath)) {
+        return res.status(404).json({ error: "Audio file not found" });
+      }
+
+      res.download(
+        filePath,
+        `${beat.title}${path.extname(beat.audio_file_path)}`,
+      );
+    },
+  );
+});
+
+/**
+ * @swagger
+ * /api/beats/{beatId}/licenses:
+ *   get:
+ *     summary: Get licenses for a specific beat
+ *     tags: [Beats]
+ *     parameters:
+ *       - in: path
+ *         name: beatId
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: Beat ID
+ *     responses:
+ *       200:
+ *         description: List of licenses for the beat
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 type: object
+ *                 properties:
+ *                   license_id:
+ *                     type: integer
+ *                   name:
+ *                     type: string
+ *                   description:
+ *                     type: string
+ *                   usage_rights:
+ *                     type: string
+ *                   price:
+ *                     type: number
+ *       400:
+ *         description: Invalid beat ID
+ *       500:
+ *         description: Database error
+ */
+router.get("/:beatId/licenses", (req, res) => {
+  const beatId = Number(req.params.beatId);
+  const db = getDB();
+
+  if (!beatId) {
+    return res.status(400).json({ error: "Invalid beat ID" });
+  }
+
+  db.all(
+    `
+    SELECT
+      l.id AS license_id,
+      l.name,
+      l.description,
+      l.usage_rights,
+      bl.price
+    FROM beat_licenses bl
+    JOIN licenses l ON bl.license_id = l.id
+    WHERE bl.beat_id = ?
+    ORDER BY l.id ASC
+    `,
+    [beatId],
+    (err, rows) => {
+      if (err) {
+        console.error("GET BEAT LICENSES ERROR:", err.message);
+        return res.status(500).json({ error: "Database error" });
+      }
+
+      res.json(rows);
+    },
+  );
+});
+
+export default router;

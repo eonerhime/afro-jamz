@@ -1,0 +1,716 @@
+{
+  "clientName": "Thunder Client",
+  "collectionName": "AfroJamz API - Complete Test Suite",
+  "collectionId": "afrojamz_complete_tests",
+  "dateExported": "2026-01-10",
+  "version": "1.2",
+  "folders": [
+    {
+      "_id": "folder_auth",
+      "name": "1. Authentication",
+      "containerId": "",
+      "created": "2026-01-10",
+      "sortNum": 10000
+    },
+    {
+      "_id": "folder_beats",
+      "name": "2. Beats (Public)",
+      "containerId": "",
+      "created": "2026-01-10",
+      "sortNum": 20000
+    },
+    {
+      "_id": "folder_producer",
+      "name": "3. Producer Features",
+      "containerId": "",
+      "created": "2026-01-10",
+      "sortNum": 30000
+    },
+    {
+      "_id": "folder_buyer",
+      "name": "4. Buyer Features",
+      "containerId": "",
+      "created": "2026-01-10",
+      "sortNum": 40000
+    },
+    {
+      "_id": "folder_admin",
+      "name": "5. Admin Features",
+      "containerId": "",
+      "created": "2026-01-10",
+      "sortNum": 50000
+    }
+  ],
+  "requests": [
+    {
+      "_id": "req_register_producer",
+      "colId": "afrojamz_complete_tests",
+      "containerId": "folder_auth",
+      "name": "Register Producer",
+      "url": "http://localhost:3001/auth/register",
+      "method": "POST",
+      "sortNum": 10000,
+      "created": "2026-01-10",
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "body": {
+        "type": "json",
+        "raw": "{\n  \"username\": \"producer1\",\n  \"email\": \"producer@test.com\",\n  \"password\": \"Producer123!\",\n  \"role\": \"producer\"\n}",
+        "form": []
+      },
+      "tests": [
+        {
+          "type": "res-code",
+          "value": "201"
+        },
+        {
+          "type": "json-query",
+          "value": "json.token",
+          "target": "producer_token"
+        }
+      ]
+    },
+    {
+      "_id": "req_register_buyer",
+      "colId": "afrojamz_complete_tests",
+      "containerId": "folder_auth",
+      "name": "Register Buyer",
+      "url": "http://localhost:3001/auth/register",
+      "method": "POST",
+      "sortNum": 20000,
+      "created": "2026-01-10",
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "body": {
+        "type": "json",
+        "raw": "{\n  \"username\": \"buyer1\",\n  \"email\": \"buyer@test.com\",\n  \"password\": \"Buyer123!\",\n  \"role\": \"buyer\"\n}",
+        "form": []
+      },
+      "tests": [
+        {
+          "type": "res-code",
+          "value": "201"
+        },
+        {
+          "type": "json-query",
+          "value": "json.token",
+          "target": "buyer_token"
+        }
+      ]
+    },
+    {
+      "_id": "req_register_admin",
+      "colId": "afrojamz_complete_tests",
+      "containerId": "folder_auth",
+      "name": "Register Admin (Manual Upgrade Required)",
+      "url": "http://localhost:3001/auth/register",
+      "method": "POST",
+      "sortNum": 30000,
+      "created": "2026-01-10",
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "body": {
+        "type": "json",
+        "raw": "{\n  \"username\": \"admin\",\n  \"email\": \"admin@test.com\",\n  \"password\": \"Admin123!\",\n  \"role\": \"buyer\"\n}",
+        "form": []
+      },
+      "tests": [
+        {
+          "type": "res-code",
+          "value": "201"
+        }
+      ]
+    },
+    {
+      "_id": "req_login_producer",
+      "colId": "afrojamz_complete_tests",
+      "containerId": "folder_auth",
+      "name": "Login Producer",
+      "url": "http://localhost:3001/auth/login",
+      "method": "POST",
+      "sortNum": 40000,
+      "created": "2026-01-10",
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "body": {
+        "type": "json",
+        "raw": "{\n  \"email\": \"producer@test.com\",\n  \"password\": \"Producer123!\"\n}",
+        "form": []
+      },
+      "tests": [
+        {
+          "type": "res-code",
+          "value": "200"
+        },
+        {
+          "type": "json-query",
+          "value": "json.token",
+          "target": "producer_token"
+        }
+      ]
+    },
+    {
+      "_id": "req_login_buyer",
+      "colId": "afrojamz_complete_tests",
+      "containerId": "folder_auth",
+      "name": "Login Buyer",
+      "url": "http://localhost:3001/auth/login",
+      "method": "POST",
+      "sortNum": 50000,
+      "created": "2026-01-10",
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "body": {
+        "type": "json",
+        "raw": "{\n  \"email\": \"buyer@test.com\",\n  \"password\": \"Buyer123!\"\n}",
+        "form": []
+      },
+      "tests": [
+        {
+          "type": "res-code",
+          "value": "200"
+        },
+        {
+          "type": "json-query",
+          "value": "json.token",
+          "target": "buyer_token"
+        }
+      ]
+    },
+    {
+      "_id": "req_login_admin",
+      "colId": "afrojamz_complete_tests",
+      "containerId": "folder_auth",
+      "name": "Login Admin",
+      "url": "http://localhost:3001/auth/login",
+      "method": "POST",
+      "sortNum": 60000,
+      "created": "2026-01-10",
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "body": {
+        "type": "json",
+        "raw": "{\n  \"email\": \"admin@test.com\",\n  \"password\": \"Admin123!\"\n}",
+        "form": []
+      },
+      "tests": [
+        {
+          "type": "res-code",
+          "value": "200"
+        },
+        {
+          "type": "json-query",
+          "value": "json.token",
+          "target": "admin_token"
+        }
+      ]
+    },
+    {
+      "_id": "req_get_all_beats",
+      "colId": "afrojamz_complete_tests",
+      "containerId": "folder_beats",
+      "name": "Get All Beats (Public)",
+      "url": "http://localhost:3001/api/beats",
+      "method": "GET",
+      "sortNum": 10000,
+      "created": "2026-01-10",
+      "tests": [
+        {
+          "type": "res-code",
+          "value": "200"
+        }
+      ]
+    },
+    {
+      "_id": "req_get_all_beats_filter",
+      "colId": "afrojamz_complete_tests",
+      "containerId": "folder_beats",
+      "name": "Get Beats by Genre",
+      "url": "http://localhost:3001/api/beats?genre=Afrobeat",
+      "method": "GET",
+      "sortNum": 20000,
+      "created": "2026-01-10",
+      "tests": [
+        {
+          "type": "res-code",
+          "value": "200"
+        }
+      ]
+    },
+    {
+      "_id": "req_get_beat_details",
+      "colId": "afrojamz_complete_tests",
+      "containerId": "folder_beats",
+      "name": "Get Beat Details",
+      "url": "http://localhost:3001/api/beats/1",
+      "method": "GET",
+      "sortNum": 30000,
+      "created": "2026-01-10",
+      "tests": [
+        {
+          "type": "res-code",
+          "value": "200"
+        }
+      ]
+    },
+    {
+      "_id": "req_get_licenses",
+      "colId": "afrojamz_complete_tests",
+      "containerId": "folder_beats",
+      "name": "Get Standard Licenses",
+      "url": "http://localhost:3001/api/licenses",
+      "method": "GET",
+      "sortNum": 40000,
+      "created": "2026-01-10",
+      "tests": [
+        {
+          "type": "res-code",
+          "value": "200"
+        }
+      ]
+    },
+    {
+      "_id": "req_get_beat_licenses",
+      "colId": "afrojamz_complete_tests",
+      "containerId": "folder_beats",
+      "name": "Get Licenses for Beat",
+      "url": "http://localhost:3001/api/licenses/1",
+      "method": "GET",
+      "sortNum": 50000,
+      "created": "2026-01-10",
+      "tests": [
+        {
+          "type": "res-code",
+          "value": "200"
+        }
+      ]
+    },
+    {
+      "_id": "req_upload_beat",
+      "colId": "afrojamz_complete_tests",
+      "containerId": "folder_producer",
+      "name": "Upload Beat (Requires Audio File)",
+      "url": "http://localhost:3001/api/producer/beats/upload",
+      "method": "POST",
+      "sortNum": 10000,
+      "created": "2026-01-10",
+      "headers": [
+        {
+          "name": "Authorization",
+          "value": "Bearer {{producer_token}}"
+        }
+      ],
+      "body": {
+        "type": "formdata",
+        "raw": "",
+        "form": [],
+        "files": []
+      },
+      "tests": [
+        {
+          "type": "res-code",
+          "value": "201"
+        }
+      ]
+    },
+    {
+      "_id": "req_get_my_beats",
+      "colId": "afrojamz_complete_tests",
+      "containerId": "folder_producer",
+      "name": "Get My Beats",
+      "url": "http://localhost:3001/api/producer/beats/my-beats",
+      "method": "GET",
+      "sortNum": 20000,
+      "created": "2026-01-10",
+      "headers": [
+        {
+          "name": "Authorization",
+          "value": "Bearer {{producer_token}}"
+        }
+      ],
+      "tests": [
+        {
+          "type": "res-code",
+          "value": "200"
+        }
+      ]
+    },
+    {
+      "_id": "req_create_license",
+      "colId": "afrojamz_complete_tests",
+      "containerId": "folder_producer",
+      "name": "Create License for Beat",
+      "url": "http://localhost:3001/api/licenses",
+      "method": "POST",
+      "sortNum": 30000,
+      "created": "2026-01-10",
+      "headers": [
+        {
+          "name": "Authorization",
+          "value": "Bearer {{producer_token}}"
+        },
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "body": {
+        "type": "json",
+        "raw": "{\n  \"beat_id\": 1,\n  \"name\": \"Basic\",\n  \"price\": 29.99,\n  \"description\": \"Basic license for non-commercial use\",\n  \"usage_rights\": \"Non-commercial use, streaming allowed\"\n}",
+        "form": []
+      },
+      "tests": [
+        {
+          "type": "res-code",
+          "value": "201"
+        }
+      ]
+    },
+    {
+      "_id": "req_add_payment_method",
+      "colId": "afrojamz_complete_tests",
+      "containerId": "folder_buyer",
+      "name": "Add Payment Method",
+      "url": "http://localhost:3001/api/buyer/payment-methods",
+      "method": "POST",
+      "sortNum": 10000,
+      "created": "2026-01-10",
+      "headers": [
+        {
+          "name": "Authorization",
+          "value": "Bearer {{buyer_token}}"
+        },
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "body": {
+        "type": "json",
+        "raw": "{\n  \"provider\": \"card\",\n  \"card_number\": \"4111111111111111\",\n  \"expiry_month\": 12,\n  \"expiry_year\": 2026,\n  \"cvv\": \"123\",\n  \"cardholder_name\": \"Test Buyer\"\n}",
+        "form": []
+      },
+      "tests": [
+        {
+          "type": "res-code",
+          "value": "201"
+        }
+      ]
+    },
+    {
+      "_id": "req_get_payment_methods",
+      "colId": "afrojamz_complete_tests",
+      "containerId": "folder_buyer",
+      "name": "Get My Payment Methods",
+      "url": "http://localhost:3001/api/buyer/payment-methods",
+      "method": "GET",
+      "sortNum": 20000,
+      "created": "2026-01-10",
+      "headers": [
+        {
+          "name": "Authorization",
+          "value": "Bearer {{buyer_token}}"
+        }
+      ],
+      "tests": [
+        {
+          "type": "res-code",
+          "value": "200"
+        }
+      ]
+    },
+    {
+      "_id": "req_set_default_payment",
+      "colId": "afrojamz_complete_tests",
+      "containerId": "folder_buyer",
+      "name": "Set Default Payment Method",
+      "url": "http://localhost:3001/api/buyer/payment-methods/1/default",
+      "method": "PUT",
+      "sortNum": 30000,
+      "created": "2026-01-10",
+      "headers": [
+        {
+          "name": "Authorization",
+          "value": "Bearer {{buyer_token}}"
+        }
+      ],
+      "tests": [
+        {
+          "type": "res-code",
+          "value": "200"
+        }
+      ]
+    },
+    {
+      "_id": "req_purchase_beat",
+      "colId": "afrojamz_complete_tests",
+      "containerId": "folder_buyer",
+      "name": "Purchase Beat",
+      "url": "http://localhost:3001/api/buyer/purchases",
+      "method": "POST",
+      "sortNum": 40000,
+      "created": "2026-01-10",
+      "headers": [
+        {
+          "name": "Authorization",
+          "value": "Bearer {{buyer_token}}"
+        },
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "body": {
+        "type": "json",
+        "raw": "{\n  \"beat_id\": 1,\n  \"license_id\": 1,\n  \"payment_method_id\": 1\n}",
+        "form": []
+      },
+      "tests": [
+        {
+          "type": "res-code",
+          "value": "201"
+        }
+      ]
+    },
+    {
+      "_id": "req_get_purchase_history",
+      "colId": "afrojamz_complete_tests",
+      "containerId": "folder_buyer",
+      "name": "Get Purchase History",
+      "url": "http://localhost:3001/api/buyer/purchases/history",
+      "method": "GET",
+      "sortNum": 50000,
+      "created": "2026-01-10",
+      "headers": [
+        {
+          "name": "Authorization",
+          "value": "Bearer {{buyer_token}}"
+        }
+      ],
+      "tests": [
+        {
+          "type": "res-code",
+          "value": "200"
+        }
+      ]
+    },
+    {
+      "_id": "req_get_purchase_detail",
+      "colId": "afrojamz_complete_tests",
+      "containerId": "folder_buyer",
+      "name": "Get Purchase Details",
+      "url": "http://localhost:3001/api/buyer/purchases/1",
+      "method": "GET",
+      "sortNum": 60000,
+      "created": "2026-01-10",
+      "headers": [
+        {
+          "name": "Authorization",
+          "value": "Bearer {{buyer_token}}"
+        }
+      ],
+      "tests": [
+        {
+          "type": "res-code",
+          "value": "200"
+        }
+      ]
+    },
+    {
+      "_id": "req_get_secure_url",
+      "colId": "afrojamz_complete_tests",
+      "containerId": "folder_buyer",
+      "name": "Get Secure Download URL",
+      "url": "http://localhost:3001/api/buyer/beats/1/secure-url",
+      "method": "GET",
+      "sortNum": 70000,
+      "created": "2026-01-10",
+      "headers": [
+        {
+          "name": "Authorization",
+          "value": "Bearer {{buyer_token}}"
+        }
+      ],
+      "tests": [
+        {
+          "type": "res-code",
+          "value": "200"
+        }
+      ]
+    },
+    {
+      "_id": "req_lodge_dispute",
+      "colId": "afrojamz_complete_tests",
+      "containerId": "folder_buyer",
+      "name": "Lodge Dispute",
+      "url": "http://localhost:3001/api/buyer/purchases/1/dispute",
+      "method": "POST",
+      "sortNum": 80000,
+      "created": "2026-01-10",
+      "headers": [
+        {
+          "name": "Authorization",
+          "value": "Bearer {{buyer_token}}"
+        },
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "body": {
+        "type": "json",
+        "raw": "{\n  \"reason\": \"Beat quality does not match description\"\n}",
+        "form": []
+      },
+      "tests": [
+        {
+          "type": "res-code",
+          "value": "201"
+        }
+      ]
+    },
+    {
+      "_id": "req_admin_get_users",
+      "colId": "afrojamz_complete_tests",
+      "containerId": "folder_admin",
+      "name": "Get All Users",
+      "url": "http://localhost:3001/api/admin/users",
+      "method": "GET",
+      "sortNum": 10000,
+      "created": "2026-01-10",
+      "headers": [
+        {
+          "name": "Authorization",
+          "value": "Bearer {{admin_token}}"
+        }
+      ],
+      "tests": [
+        {
+          "type": "res-code",
+          "value": "200"
+        }
+      ]
+    },
+    {
+      "_id": "req_admin_get_purchases",
+      "colId": "afrojamz_complete_tests",
+      "containerId": "folder_admin",
+      "name": "Get All Purchases",
+      "url": "http://localhost:3001/api/admin/purchases",
+      "method": "GET",
+      "sortNum": 20000,
+      "created": "2026-01-10",
+      "headers": [
+        {
+          "name": "Authorization",
+          "value": "Bearer {{admin_token}}"
+        }
+      ],
+      "tests": [
+        {
+          "type": "res-code",
+          "value": "200"
+        }
+      ]
+    },
+    {
+      "_id": "req_admin_analytics",
+      "colId": "afrojamz_complete_tests",
+      "containerId": "folder_admin",
+      "name": "Get Platform Analytics",
+      "url": "http://localhost:3001/api/admin/analytics",
+      "method": "GET",
+      "sortNum": 30000,
+      "created": "2026-01-10",
+      "headers": [
+        {
+          "name": "Authorization",
+          "value": "Bearer {{admin_token}}"
+        }
+      ],
+      "tests": [
+        {
+          "type": "res-code",
+          "value": "200"
+        }
+      ]
+    },
+    {
+      "_id": "req_admin_get_disputes",
+      "colId": "afrojamz_complete_tests",
+      "containerId": "folder_admin",
+      "name": "Get Pending Disputes",
+      "url": "http://localhost:3001/api/admin/disputes",
+      "method": "GET",
+      "sortNum": 40000,
+      "created": "2026-01-10",
+      "headers": [
+        {
+          "name": "Authorization",
+          "value": "Bearer {{admin_token}}"
+        }
+      ],
+      "tests": [
+        {
+          "type": "res-code",
+          "value": "200"
+        }
+      ]
+    },
+    {
+      "_id": "req_admin_resolve_dispute",
+      "colId": "afrojamz_complete_tests",
+      "containerId": "folder_admin",
+      "name": "Resolve Dispute",
+      "url": "http://localhost:3001/api/buyer/purchases/1/resolve-dispute",
+      "method": "POST",
+      "sortNum": 50000,
+      "created": "2026-01-10",
+      "headers": [
+        {
+          "name": "Authorization",
+          "value": "Bearer {{admin_token}}"
+        },
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "body": {
+        "type": "json",
+        "raw": "{\n  \"resolution\": \"refund\",\n  \"notes\": \"Valid complaint - refund approved\"\n}",
+        "form": []
+      },
+      "tests": [
+        {
+          "type": "res-code",
+          "value": "200"
+        }
+      ]
+    }
+  ]
+}

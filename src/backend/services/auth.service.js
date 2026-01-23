@@ -1,5 +1,5 @@
 import bcrypt from 'bcrypt';
-import db from '../db/index.js';
+import { getDB } from '../db/index.js';
 import { issueJWT } from '../utils/jwt.js';
 
 export async function registerUser(req, res) {
@@ -19,6 +19,7 @@ export async function registerUser(req, res) {
 
   try {
     const hashedPassword = await bcrypt.hash(password, 10);
+    const db = getDB();
 
     db.run(
       `INSERT INTO users (email, password_hash, display_name, role, auth_provider, email_verified)
@@ -60,6 +61,7 @@ export async function registerUser(req, res) {
 
 export async function loginUser(req, res) {
   const { email, password } = req.body;
+  const db = getDB();
 
   db.get(
     `SELECT * FROM users WHERE email = ?`,
@@ -78,6 +80,7 @@ export async function loginUser(req, res) {
 
 export async function handleOAuthCallback(provider, profile, role, res) {
   const { email, name, providerId } = profile;
+  const db = getDB();
 
   // 1️⃣ Check for existing user by email or OAuth ID
   db.get(

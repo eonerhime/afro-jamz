@@ -1,0 +1,359 @@
+{
+  "version": "1.0.0",
+  "name": "Afro-Jamz API Tests",
+  "description": "Thunder Client test collection for all Afro-Jamz routes",
+  "folders": [
+    {
+      "name": "Authentication",
+      "requests": [
+        {
+          "id": "auth_register",
+          "name": "Register User (Buyer)",
+          "method": "POST",
+          "url": "{{baseUrl}}/auth/register",
+          "headers": {
+            "Content-Type": "application/json"
+          },
+          "body": {
+            "email": "buyer@example.com",
+            "password": "Test@1234",
+            "displayName": "Test Buyer",
+            "role": "buyer"
+          },
+          "expectedStatus": 201
+        },
+        {
+          "id": "auth_register_producer",
+          "name": "Register User (Producer)",
+          "method": "POST",
+          "url": "{{baseUrl}}/auth/register",
+          "headers": {
+            "Content-Type": "application/json"
+          },
+          "body": {
+            "email": "producer@example.com",
+            "password": "Test@1234",
+            "displayName": "Test Producer",
+            "role": "producer",
+            "accept_indemnity": true
+          },
+          "expectedStatus": 201
+        },
+        {
+          "id": "auth_login",
+          "name": "Login User",
+          "method": "POST",
+          "url": "{{baseUrl}}/auth/login",
+          "headers": {
+            "Content-Type": "application/json"
+          },
+          "body": {
+            "email": "buyer@example.com",
+            "password": "Test@1234"
+          },
+          "expectedStatus": 200,
+          "tests": [
+            {
+              "name": "Should return JWT token",
+              "assertion": "res.json().token !== undefined"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Licenses",
+      "requests": [
+        {
+          "id": "licenses_getAll",
+          "name": "Get All Standard Licenses",
+          "method": "GET",
+          "url": "{{baseUrl}}/api/licenses",
+          "headers": {},
+          "expectedStatus": 200,
+          "tests": [
+            {
+              "name": "Should return array",
+              "assertion": "Array.isArray(res.json())"
+            },
+            {
+              "name": "Should have 5 licenses",
+              "assertion": "res.json().length === 5"
+            }
+          ]
+        },
+        {
+          "id": "licenses_getByBeat",
+          "name": "Get Licenses for Beat",
+          "method": "GET",
+          "url": "{{baseUrl}}/api/beats/1/licenses",
+          "headers": {},
+          "expectedStatus": 200,
+          "tests": [
+            {
+              "name": "Should return array",
+              "assertion": "Array.isArray(res.json())"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Payment Methods",
+      "requests": [
+        {
+          "id": "payment_list",
+          "name": "Get All Payment Methods",
+          "method": "GET",
+          "url": "{{baseUrl}}/api/buyer/payment-methods",
+          "headers": {
+            "Authorization": "Bearer {{authToken}}"
+          },
+          "expectedStatus": 200,
+          "tests": [
+            {
+              "name": "Should return array",
+              "assertion": "Array.isArray(res.json())"
+            }
+          ]
+        },
+        {
+          "id": "payment_create",
+          "name": "Save Payment Method",
+          "method": "POST",
+          "url": "{{baseUrl}}/api/buyer/payment-methods",
+          "headers": {
+            "Authorization": "Bearer {{authToken}}",
+            "Content-Type": "application/json"
+          },
+          "body": {
+            "provider": "stripe",
+            "reference_id": "pm_test123",
+            "is_default": true
+          },
+          "expectedStatus": 201,
+          "tests": [
+            {
+              "name": "Should return payment method ID",
+              "assertion": "res.json().id !== undefined"
+            },
+            {
+              "name": "Should mask reference ID",
+              "assertion": "res.json().reference_id.includes('****')"
+            }
+          ]
+        },
+        {
+          "id": "payment_setDefault",
+          "name": "Set Payment Method as Default",
+          "method": "PATCH",
+          "url": "{{baseUrl}}/api/buyer/payment-methods/{{paymentMethodId}}/default",
+          "headers": {
+            "Authorization": "Bearer {{authToken}}"
+          },
+          "expectedStatus": 200
+        },
+        {
+          "id": "payment_delete",
+          "name": "Delete Payment Method",
+          "method": "DELETE",
+          "url": "{{baseUrl}}/api/buyer/payment-methods/{{paymentMethodId}}",
+          "headers": {
+            "Authorization": "Bearer {{authToken}}"
+          },
+          "expectedStatus": 200
+        }
+      ]
+    },
+    {
+      "name": "Purchases",
+      "requests": [
+        {
+          "id": "purchase_create",
+          "name": "Purchase Beat with License",
+          "method": "POST",
+          "url": "{{baseUrl}}/api/buyer/purchases/purchase",
+          "headers": {
+            "Authorization": "Bearer {{authToken}}",
+            "Content-Type": "application/json"
+          },
+          "body": {
+            "beat_id": 1,
+            "license_id": 2,
+            "payment_method_id": 1
+          },
+          "expectedStatus": 201,
+          "tests": [
+            {
+              "name": "Should return purchase ID",
+              "assertion": "res.json().purchase_id !== undefined"
+            },
+            {
+              "name": "Should include license info",
+              "assertion": "res.json().license !== undefined"
+            }
+          ]
+        },
+        {
+          "id": "purchase_list",
+          "name": "Get Purchase History",
+          "method": "GET",
+          "url": "{{baseUrl}}/api/buyer/purchases",
+          "headers": {
+            "Authorization": "Bearer {{authToken}}"
+          },
+          "expectedStatus": 200,
+          "tests": [
+            {
+              "name": "Should return array",
+              "assertion": "Array.isArray(res.json())"
+            }
+          ]
+        },
+        {
+          "id": "purchase_download",
+          "name": "Download Purchased Beat",
+          "method": "GET",
+          "url": "{{baseUrl}}/api/buyer/purchases/beats/1/download",
+          "headers": {
+            "Authorization": "Bearer {{authToken}}"
+          },
+          "expectedStatus": 200
+        },
+        {
+          "id": "purchase_secureUrl",
+          "name": "Get Secure Download URL",
+          "method": "GET",
+          "url": "{{baseUrl}}/api/buyer/purchases/beats/1/secure-url",
+          "headers": {
+            "Authorization": "Bearer {{authToken}}"
+          },
+          "expectedStatus": 200,
+          "tests": [
+            {
+              "name": "Should return download URL",
+              "assertion": "res.json().downloadUrl !== undefined"
+            }
+          ]
+        },
+        {
+          "id": "purchase_dispute",
+          "name": "File Purchase Dispute",
+          "method": "POST",
+          "url": "{{baseUrl}}/api/buyer/purchases/{{purchaseId}}/dispute",
+          "headers": {
+            "Authorization": "Bearer {{authToken}}",
+            "Content-Type": "application/json"
+          },
+          "body": {
+            "reason": "Beat file is corrupted or missing"
+          },
+          "expectedStatus": 200
+        }
+      ]
+    },
+    {
+      "name": "Admin",
+      "requests": [
+        {
+          "id": "admin_licenses",
+          "name": "Get All Licenses (Admin)",
+          "method": "GET",
+          "url": "{{baseUrl}}/api/admin/licenses",
+          "headers": {
+            "Authorization": "Bearer {{adminToken}}"
+          },
+          "expectedStatus": 200
+        },
+        {
+          "id": "admin_beats",
+          "name": "Get All Beats (Admin)",
+          "method": "GET",
+          "url": "{{baseUrl}}/api/admin/beats",
+          "headers": {
+            "Authorization": "Bearer {{adminToken}}"
+          },
+          "expectedStatus": 200,
+          "tests": [
+            {
+              "name": "Should return array",
+              "assertion": "Array.isArray(res.json())"
+            }
+          ]
+        },
+        {
+          "id": "admin_beatStatus",
+          "name": "Update Beat Status (Admin)",
+          "method": "PUT",
+          "url": "{{baseUrl}}/api/admin/beats/{{beatId}}/status",
+          "headers": {
+            "Authorization": "Bearer {{adminToken}}",
+            "Content-Type": "application/json"
+          },
+          "body": {
+            "status": "disabled"
+          },
+          "expectedStatus": 200
+        },
+        {
+          "id": "admin_sales",
+          "name": "Get All Sales (Admin)",
+          "method": "GET",
+          "url": "{{baseUrl}}/api/admin/sales",
+          "headers": {
+            "Authorization": "Bearer {{adminToken}}"
+          },
+          "expectedStatus": 200,
+          "tests": [
+            {
+              "name": "Should return array",
+              "assertion": "Array.isArray(res.json())"
+            }
+          ]
+        },
+        {
+          "id": "admin_salesSummary",
+          "name": "Get Sales Summary (Admin)",
+          "method": "GET",
+          "url": "{{baseUrl}}/api/admin/sales/summary",
+          "headers": {
+            "Authorization": "Bearer {{adminToken}}"
+          },
+          "expectedStatus": 200,
+          "tests": [
+            {
+              "name": "Should return summary object",
+              "assertion": "res.json().total_purchases !== undefined"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "variables": [
+    {
+      "name": "baseUrl",
+      "value": "http://localhost:3001"
+    },
+    {
+      "name": "authToken",
+      "value": ""
+    },
+    {
+      "name": "adminToken",
+      "value": ""
+    },
+    {
+      "name": "paymentMethodId",
+      "value": "1"
+    },
+    {
+      "name": "beatId",
+      "value": "1"
+    },
+    {
+      "name": "purchaseId",
+      "value": "1"
+    }
+  ]
+}
