@@ -78,75 +78,81 @@ export async function loginUser(req, res) {
   );
 }
 
-export async function handleOAuthCallback(provider, profile, role, res) {
-  const { email, name, providerId } = profile;
+export async function handleOAuthCallback(provider, profile, role) {
+  const { email, name, providerId, emailVerified } = profile;
   const db = getDB();
 
-  // 1️⃣ Check for existing user by email or OAuth ID
-  db.get(
-    `SELECT * FROM users WHERE email = ? OR oauth_provider_id = ?`,
-    [email, providerId],
-    async (err, user) => {
-      if (err) return res.status(500).json({ error: err.message });
+  return new Promise((resolve, reject) => {
+    // 1️⃣ Check for existing user by email or OAuth ID
+    db.get(
+      `SELECT * FROM users WHERE email = ? OR oauth_provider_id = ?`,
+      [email, providerId],
+      async (err, user) => {
+        if (err) return reject(new Error(err.message));
 
-      let userId;
-      let isNewProducer = false;
+        let userId;
+        let userRole;
 
-      if (!user) {
-        // 2️⃣ User does not exist → create
-        db.run(
-          `INSERT INTO users (email, display_name, role, auth_provider, oauth_provider_id, email_verified)
-           VALUES (?, ?, ?, ?, ?, 1)`,
-          [email, name, role, provider, providerId],
-          function (err) {
-            if (err) return res.status(500).json({ error: err.message });
-
-            userId = this.lastID;
-
-            if (role === 'producer') {
-              // Producer indemnity must be handled AFTER OAuth login
-              isNewProducer = true;
-            }
-
-            const token = issueJWT({
-              id: userId,
-              role,
-              auth_provider: provider
-            });
-
-            res.json({ token, indemnityRequired: isNewProducer });
-          }
-        );
-      } else {
-        // 3️⃣ Existing user → update OAuth ID if missing
-        if (!user.oauth_provider_id) {
+        if (!user) {
+          // 2️⃣ User does not exist → create
           db.run(
-            `UPDATE users SET oauth_provider_id = ? WHERE id = ?`,
-            [providerId, user.id]
-          );
-        }
+            `INSERT INTO users (email, username, role, auth_provider, oauth_provider_id, email_verified)
+             VALUES (?, ?, ?, ?, ?, ?)`,
+            [email, name || email.split('@')[0], role, provider, providerId, emailVerified ? 1 : 0],
+            function (err) {
+              if (err) return reject(new Error(err.message));
 
-        const token = issueJWT({
-          id: user.id,
-          role: user.role,
-          auth_provider: provider
-        });
+              userId = this.lastID;
+              userRole = role;
 
-        // Check if existing producer has accepted indemnity
-        if (user.role === 'producer') {
-          db.get(
-            `SELECT * FROM producer_indemnity WHERE producer_id = ?`,
-            [user.id],
-            (err, indemnity) => {
-              if (err) return res.status(500).json({ error: err.message });
+              const token = issueJWT({
+                id: userId,
+                role: userRole,
+                auth_provider: provider,
+              });
 
-              res.json({
+              resolve({
                 token,
-                indemnityRequired: !indemnity
+                user: {
+                  id: userId,
+                  email,
+                  username: name || email.split('@')[0],
+                  role: userRole,
+                  auth_provider: provider,
+                },
               });
             }
           );
         } else {
+          // 3️⃣ Existing user → update OAuth ID if missing
+          if (!user.oauth_provider_id) {
+            db.run(
+              `UPDATE users SET oauth_provider_id = ? WHERE id = ?`,
+              [providerId, user.id]
+            );
+          }
+
+          const token = issueJWT({
+            id: user.id,
+            role: user.role,
+            auth_provider: provider,
+          });
+
+          resolve({
+            token,
+            user: {
+              id: user.id,
+              email: user.email,
+              username: user.username,
+              role: user.role,
+              auth_provider: provider,
+            },
+          });
+        }
+      }
+    );
+  });
+}
           res.json({ token });
         }
       }

@@ -6,6 +6,7 @@ import { ProtectedRoute } from "./components/ProtectedRoute";
 import HomePage from "./pages/HomePage";
 import LoginPage from "./pages/LoginPage";
 import RegisterPage from "./pages/RegisterPage";
+import OAuthCallbackPage from "./pages/OAuthCallbackPage";
 import BrowseBeats from "./pages/BrowseBeats";
 import BeatDetailPage from "./pages/BeatDetailPage";
 import ProducerDashboard from "./pages/ProducerDashboard";
@@ -20,6 +21,7 @@ function App() {
           <Route path="/" element={<HomePage />} />
           <Route path="/login" element={<LoginPage />} />
           <Route path="/register" element={<RegisterPage />} />
+          <Route path="/oauth/callback" element={<OAuthCallbackPage />} />
           <Route path="/beats" element={<BrowseBeats />} />
           <Route path="/beats/:id" element={<BeatDetailPage />} />
 

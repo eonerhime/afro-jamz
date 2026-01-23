@@ -52,6 +52,13 @@ export const AuthProvider = ({ children }) => {
     setUser(null);
   };
 
+  const loginWithToken = (newToken, newUser) => {
+    localStorage.setItem("token", newToken);
+    localStorage.setItem("user", JSON.stringify(newUser));
+    setToken(newToken);
+    setUser(newUser);
+  };
+
   const value = {
     user,
     token,
@@ -59,6 +66,7 @@ export const AuthProvider = ({ children }) => {
     login,
     register,
     logout,
+    loginWithToken,
     isAuthenticated: !!token,
     isProducer: user?.role === "producer",
     isBuyer: user?.role === "buyer",
