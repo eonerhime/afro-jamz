@@ -30,7 +30,7 @@ export default function OAuthCallbackPage() {
         } else {
           navigate("/");
         }
-      } catch (err) {
+      } catch {
         navigate("/login?error=Invalid OAuth response");
       }
     } else {
