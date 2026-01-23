@@ -6,6 +6,10 @@ package.json-lock.json
 .env
 .env.local
 
+# Google OAuth credentials
+client_secret_*.json
+client_secret_2_149994254495-j88cl7782cp0jn1nr9iviescp526om05.apps.googleusercontent.com.json
+
 # Logs
 logs/
 *.log

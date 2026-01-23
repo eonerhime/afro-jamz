@@ -1,20 +1,24 @@
-import bcrypt from 'bcrypt';
-import { getDB } from '../db/index.js';
-import { issueJWT } from '../utils/jwt.js';
+import bcrypt from "bcrypt";
+import { getDB } from "../db/index.js";
+import { issueJWT } from "../utils/jwt.js";
 
 export async function registerUser(req, res) {
   const { email, password, displayName, role, accept_indemnity } = req.body;
 
   if (!email || !password || !role) {
-    return res.status(400).json({ error: 'Email, password, and role required' });
+    return res
+      .status(400)
+      .json({ error: "Email, password, and role required" });
   }
 
-  if (!['buyer', 'producer'].includes(role)) {
-    return res.status(400).json({ error: 'Role must be buyer or producer' });
+  if (!["buyer", "producer"].includes(role)) {
+    return res.status(400).json({ error: "Role must be buyer or producer" });
   }
 
-  if (role === 'producer' && accept_indemnity !== true) {
-    return res.status(400).json({ error: 'Producers must accept indemnity terms' });
+  if (role === "producer" && accept_indemnity !== true) {
+    return res
+      .status(400)
+      .json({ error: "Producers must accept indemnity terms" });
   }
 
   try {
@@ -27,8 +31,8 @@ export async function registerUser(req, res) {
       [email, hashedPassword, displayName, role],
       function (err) {
         if (err) {
-          if (err.code === 'SQLITE_CONSTRAINT_UNIQUE') {
-            return res.status(409).json({ error: 'Email already exists' });
+          if (err.code === "SQLITE_CONSTRAINT_UNIQUE") {
+            return res.status(409).json({ error: "Email already exists" });
           }
           return res.status(500).json({ error: err.message });
         }
@@ -36,15 +40,15 @@ export async function registerUser(req, res) {
         const user = {
           id: this.lastID,
           role,
-          auth_provider: 'local'
+          auth_provider: "local",
         };
 
         // Insert indemnity for producers
-        if (role === 'producer') {
+        if (role === "producer") {
           db.run(
             `INSERT INTO producer_indemnity (producer_id, agreed, agreed_at, version)
              VALUES (?, 1, CURRENT_TIMESTAMP, 'v1.0')`,
-            [user.id]
+            [user.id],
           );
         }
 
@@ -52,10 +56,10 @@ export async function registerUser(req, res) {
         const token = issueJWT(user);
 
         res.status(201).json({ token });
-      }
+      },
     );
   } catch (error) {
-    res.status(500).json({ error: 'Server error' });
+    res.status(500).json({ error: "Server error" });
   }
 }
 
@@ -63,19 +67,15 @@ export async function loginUser(req, res) {
   const { email, password } = req.body;
   const db = getDB();
 
-  db.get(
-    `SELECT * FROM users WHERE email = ?`,
-    [email],
-    async (err, user) => {
-      if (!user) return res.status(401).json({ error: 'Invalid credentials' });
+  db.get(`SELECT * FROM users WHERE email = ?`, [email], async (err, user) => {
+    if (!user) return res.status(401).json({ error: "Invalid credentials" });
 
-      const valid = await bcrypt.compare(password, user.password_hash);
-      if (!valid) return res.status(401).json({ error: 'Invalid credentials' });
+    const valid = await bcrypt.compare(password, user.password_hash);
+    if (!valid) return res.status(401).json({ error: "Invalid credentials" });
 
-      const token = issueJWT(user);
-      res.json({ token });
-    }
-  );
+    const token = issueJWT(user);
+    res.json({ token });
+  });
 }
 
 export async function handleOAuthCallback(provider, profile, role) {
@@ -98,7 +98,14 @@ export async function handleOAuthCallback(provider, profile, role) {
           db.run(
             `INSERT INTO users (email, username, role, auth_provider, oauth_provider_id, email_verified)
              VALUES (?, ?, ?, ?, ?, ?)`,
-            [email, name || email.split('@')[0], role, provider, providerId, emailVerified ? 1 : 0],
+            [
+              email,
+              name || email.split("@")[0],
+              role,
+              provider,
+              providerId,
+              emailVerified ? 1 : 0,
+            ],
             function (err) {
               if (err) return reject(new Error(err.message));
 
@@ -116,20 +123,20 @@ export async function handleOAuthCallback(provider, profile, role) {
                 user: {
                   id: userId,
                   email,
-                  username: name || email.split('@')[0],
+                  username: name || email.split("@")[0],
                   role: userRole,
                   auth_provider: provider,
                 },
               });
-            }
+            },
           );
         } else {
           // 3️⃣ Existing user → update OAuth ID if missing
           if (!user.oauth_provider_id) {
-            db.run(
-              `UPDATE users SET oauth_provider_id = ? WHERE id = ?`,
-              [providerId, user.id]
-            );
+            db.run(`UPDATE users SET oauth_provider_id = ? WHERE id = ?`, [
+              providerId,
+              user.id,
+            ]);
           }
 
           const token = issueJWT({
@@ -149,13 +156,7 @@ export async function handleOAuthCallback(provider, profile, role) {
             },
           });
         }
-      }
+      },
     );
   });
-}
-          res.json({ token });
-        }
-      }
-    }
-  );
 }
