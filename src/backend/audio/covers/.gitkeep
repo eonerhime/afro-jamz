@@ -1,0 +1,3 @@
+# This directory stores beat cover artwork
+# Images are served via Express static middleware
+# Recommended size: 800x800px or 1000x1000px
