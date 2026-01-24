@@ -1,11 +1,13 @@
 # Beat Browsing Page - Design Specification
 
 ## Overview
+
 Based on BeatStars analysis, the beat browsing page is the core discovery experience. This document outlines the design and implementation plan.
 
 ## Page Layout
 
 ### Header Section
+
 ```
 ┌─────────────────────────────────────────────────────────┐
 │  Logo    Browse Beats   Producers   [Search Bar]  Login │
@@ -13,6 +15,7 @@ Based on BeatStars analysis, the beat browsing page is the core discovery experi
 ```
 
 ### Main Content Area
+
 ```
 ┌────────────┬────────────────────────────────────────────┐
 │            │                                            │
@@ -36,6 +39,7 @@ Based on BeatStars analysis, the beat browsing page is the core discovery experi
 ```
 
 ### Persistent Audio Player (Bottom)
+
 ```
 ┌─────────────────────────────────────────────────────────┐
 │ ▶️  Beat Name - Producer  [━━━━━━━━━━] 1:23/3:45  🔊   │
@@ -45,6 +49,7 @@ Based on BeatStars analysis, the beat browsing page is the core discovery experi
 ## Beat Card Component
 
 ### Design
+
 ```
 ┌─────────────────────────┐
 │  ┌─────────────────────┐│
@@ -63,6 +68,7 @@ Based on BeatStars analysis, the beat browsing page is the core discovery experi
 ```
 
 ### Card Information
+
 - **Cover Art**: Beat artwork/thumbnail
 - **Play Button**: Overlay on hover, loads into persistent player
 - **Beat Title**: Main identifier
@@ -80,6 +86,7 @@ Based on BeatStars analysis, the beat browsing page is the core discovery experi
 ### Filter Categories
 
 #### 1. Genre Filter
+
 ```jsx
 Genre
 ☑️ Afrobeat (234)
@@ -91,6 +98,7 @@ Genre
 ```
 
 #### 2. Mood/Vibe Filter
+
 ```jsx
 Mood
 ☐ Dark/Aggressive
@@ -101,6 +109,7 @@ Mood
 ```
 
 #### 3. BPM Range Slider
+
 ```jsx
 BPM Range
 [━━━━━◉━━━━━◉━━━━━]
@@ -108,6 +117,7 @@ BPM Range
 ```
 
 #### 4. Key Filter
+
 ```jsx
 Musical Key
 ☐ C Major
@@ -117,6 +127,7 @@ Musical Key
 ```
 
 #### 5. Price Range
+
 ```jsx
 Price Range
 [━━━━━◉━━━━━◉━━━━━]
@@ -124,6 +135,7 @@ $0          $50         $100+
 ```
 
 #### 6. Sort Options
+
 ```jsx
 Sort By: [Recently Added ▼]
 - Recently Added
@@ -137,6 +149,7 @@ Sort By: [Recently Added ▼]
 ## Persistent Audio Player Component
 
 ### Features
+
 - Stays fixed at bottom while browsing
 - Shows currently playing beat info
 - Waveform visualization (optional for MVP)
@@ -145,6 +158,7 @@ Sort By: [Recently Added ▼]
 - Next/previous (if multiple beats queued)
 
 ### Design
+
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
 │ 🎵 Cover  Beat Title by Producer   ▶️ [━━━━━━━━━━] 1:23/3:45  🔊 ♥️ │
@@ -154,6 +168,7 @@ Sort By: [Recently Added ▼]
 ## Search Bar Component
 
 ### Features
+
 - Global search (always accessible)
 - Instant results dropdown
 - Search by: beat name, producer, genre, tags
@@ -161,6 +176,7 @@ Sort By: [Recently Added ▼]
 - Popular searches
 
 ### Design
+
 ```
 ┌──────────────────────────────────────┐
 │ 🔍 Search beats, producers...        │
@@ -180,16 +196,19 @@ Sort By: [Recently Added ▼]
 ## Responsive Breakpoints
 
 ### Desktop (1024px+)
+
 - 4 columns beat grid
 - Full sidebar filters
 - Large beat cards
 
 ### Tablet (768px - 1023px)
+
 - 3 columns beat grid
 - Collapsible filter sidebar
 - Medium beat cards
 
 ### Mobile (< 768px)
+
 - 1-2 columns beat grid
 - Filter button → opens modal
 - Smaller beat cards
@@ -198,6 +217,7 @@ Sort By: [Recently Added ▼]
 ## Technical Implementation Plan
 
 ### Components to Build
+
 1. **BeatCard.jsx** - Individual beat display
 2. **BeatGrid.jsx** - Grid layout container
 3. **FilterSidebar.jsx** - Filter controls
@@ -206,6 +226,7 @@ Sort By: [Recently Added ▼]
 6. **BrowseBeatsPage.jsx** - Main page component
 
 ### State Management
+
 ```javascript
 // Page state
 - beats: [] // Array of beat objects
@@ -224,6 +245,7 @@ Sort By: [Recently Added ▼]
 ```
 
 ### API Integration
+
 ```javascript
 // Endpoints to use
 GET /api/beats
@@ -239,14 +261,13 @@ GET /api/beats
 ```
 
 ### Libraries Needed
-1. **Audio Player**: 
+
+1. **Audio Player**:
    - Option A: `react-h5-audio-player` (simpler)
    - Option B: `howler.js` (more control)
-   
-2. **Range Sliders**: 
+2. **Range Sliders**:
    - `rc-slider` (customizable)
-   
-3. **Icons**: 
+3. **Icons**:
    - Already have: Lucide React or Heroicons
 
 4. **Infinite Scroll** (optional):
@@ -255,17 +276,20 @@ GET /api/beats
 ## Color Scheme (Afro-centric)
 
 ### Primary Colors
+
 - **Primary**: `#FF6B35` (Vibrant Orange - energy)
 - **Secondary**: `#F7931E` (Golden Yellow - warmth)
 - **Accent**: `#2EC4B6` (Turquoise - modern)
 
 ### Neutral Colors
+
 - **Dark**: `#1A1A1A` (Almost black)
 - **Medium**: `#4A4A4A` (Charcoal)
 - **Light**: `#F5F5F5` (Off-white)
 - **White**: `#FFFFFF`
 
 ### Usage
+
 ```css
 /* Beat cards */
 background: white
@@ -285,13 +309,14 @@ secondary: outlined with primary
 ## Typography
 
 ### Font Stack
+
 ```css
 /* Headings */
-font-family: 'Inter', 'Helvetica Neue', sans-serif;
+font-family: "Inter", "Helvetica Neue", sans-serif;
 font-weight: 700;
 
 /* Body */
-font-family: 'Inter', 'Helvetica Neue', sans-serif;
+font-family: "Inter", "Helvetica Neue", sans-serif;
 font-weight: 400;
 
 /* Beat titles */
@@ -302,15 +327,18 @@ font-size: 1.125rem;
 ## Animations & Interactions
 
 ### Beat Card Hover
+
 - Scale: 1.02
 - Shadow: elevated
 - Play button: fade in overlay
 
 ### Play Button
+
 - Ripple effect on click
 - Smooth transition to pause icon
 
 ### Filter Application
+
 - Debounced search (300ms)
 - Loading skeleton while fetching
 - Smooth fade-in of results
@@ -318,6 +346,7 @@ font-size: 1.125rem;
 ## Accessibility
 
 ### Requirements
+
 - Keyboard navigation (tab through beats)
 - ARIA labels for all interactive elements
 - Focus indicators
@@ -326,6 +355,7 @@ font-size: 1.125rem;
 - Semantic HTML
 
 ### Player Controls
+
 - Space bar: play/pause
 - Arrow keys: seek forward/back
 - M: mute/unmute
@@ -334,17 +364,20 @@ font-size: 1.125rem;
 ## Performance Optimizations
 
 ### Image Optimization
+
 - Lazy load beat artwork
 - Use WebP format with fallback
 - Responsive images (srcset)
 - Placeholder while loading
 
 ### Audio Optimization
+
 - Stream audio (don't download fully)
 - Preload next beat in queue
 - Cancel requests on component unmount
 
 ### Pagination
+
 - Load 20 beats initially
 - Infinite scroll or "Load More"
 - Virtual scrolling for 100+ beats
@@ -352,6 +385,7 @@ font-size: 1.125rem;
 ## Implementation Phases
 
 ### Phase 1: Basic Structure (This session)
+
 - [ ] Create BrowseBeatsPage component
 - [ ] Build BeatCard component
 - [ ] Implement BeatGrid layout
@@ -359,6 +393,7 @@ font-size: 1.125rem;
 - [ ] Basic styling with Tailwind
 
 ### Phase 2: Filtering & Search
+
 - [ ] FilterSidebar component
 - [ ] Filter state management
 - [ ] API integration with filters
@@ -366,6 +401,7 @@ font-size: 1.125rem;
 - [ ] Search functionality
 
 ### Phase 3: Audio Player
+
 - [ ] AudioPlayer component
 - [ ] Player state management
 - [ ] Play/pause/seek controls
@@ -373,6 +409,7 @@ font-size: 1.125rem;
 - [ ] Integration with beat cards
 
 ### Phase 4: Polish & UX
+
 - [ ] Loading states
 - [ ] Empty states
 - [ ] Error handling
@@ -383,6 +420,7 @@ font-size: 1.125rem;
 ## Testing Checklist
 
 ### Functional Testing
+
 - [ ] Beats load correctly
 - [ ] Filters apply properly
 - [ ] Search returns relevant results
@@ -392,18 +430,21 @@ font-size: 1.125rem;
 - [ ] Pagination works
 
 ### Responsive Testing
+
 - [ ] Desktop (1920px)
 - [ ] Laptop (1366px)
 - [ ] Tablet (768px)
 - [ ] Mobile (375px)
 
 ### Browser Testing
+
 - [ ] Chrome
 - [ ] Firefox
 - [ ] Safari
 - [ ] Edge
 
 ### Performance Testing
+
 - [ ] Page load time < 3s
 - [ ] Audio starts within 1s
 - [ ] Filter results < 500ms
