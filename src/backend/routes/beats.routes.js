@@ -33,29 +33,36 @@ router.get("/", (req, res) => {
   const db = getDB();
 
   let sql = `
-    SELECT beats.*, users.username AS producer_name
+    SELECT beats.*, 
+           users.display_name AS producer_name,
+           MIN(beat_licenses.price) AS min_price
     FROM beats
     LEFT JOIN users ON beats.producer_id = users.id
-    WHERE beats.is_active = 1 AND beats.status = 'enabled'
+    LEFT JOIN beat_licenses ON beats.id = beat_licenses.beat_id
   `;
   const params = [];
 
   if (genre) {
-    sql += ` AND beats.genre = ?`;
+    sql += ` WHERE beats.genre = ?`;
     params.push(genre);
   }
 
   if (search) {
-    sql += ` AND (beats.title LIKE ? OR beats.tags LIKE ?)`;
-    params.push(`%${search}%`, `%${search}%`);
+    sql += genre ? ` AND` : ` WHERE`;
+    sql += ` beats.title LIKE ?`;
+    params.push(`%${search}%`);
   }
 
-  sql += ` ORDER BY beats.created_at DESC`;
+  sql += ` GROUP BY beats.id ORDER BY beats.created_at DESC`;
 
   db.all(sql, params, (err, beats) => {
     if (err) {
-      console.error("Database error:", err);
-      return res.status(500).json({ error: "Database error" });
+      console.error("Database error in GET /api/beats:", err.message);
+      console.error("SQL:", sql);
+      console.error("Params:", params);
+      return res
+        .status(500)
+        .json({ error: "Database error", details: err.message });
     }
     res.json({ beats });
   });

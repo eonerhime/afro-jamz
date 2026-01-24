@@ -22,11 +22,19 @@ const app = express();
 // Middleware
 app.use(express.json());
 app.use(cors());
-app.use(helmet());
+app.use(
+  helmet({
+    crossOriginResourcePolicy: { policy: "cross-origin" },
+    contentSecurityPolicy: false, // Disable CSP for development
+  }),
+);
 app.use(morgan("combined"));
 
 // Serve static audio files (protected by routes)
 app.use("/audio", express.static("./src/backend/audio"));
+
+// Serve uploaded cover art images (mimics S3/CDN in production)
+app.use("/uploads", express.static("./src/backend/audio"));
 
 // Initialize database
 initializeDB();

@@ -7,6 +7,7 @@ import { authenticateToken } from "../middleware/auth.middleware.js";
 import { requireBuyer } from "../middleware/role.middleware.js";
 import { COMMISSION_RATE, HOLD_DAYS } from "../config/config.js";
 import { debitWallet, getWalletBalance } from "../services/wallet.service.js";
+import { processPayment as processGatewayPayment } from "../services/payment-gateway.service.js";
 
 const router = express.Router();
 const __filename = fileURLToPath(import.meta.url);
@@ -72,6 +73,14 @@ async function createNotification(
  *               license_id:
  *                 type: integer
  *                 example: 2
+ *               currency:
+ *                 type: string
+ *                 example: EUR
+ *                 description: Currency code for the purchase (defaults to USD)
+ *               display_amount:
+ *                 type: number
+ *                 example: 44.99
+ *                 description: Amount in the user's selected currency
  *     responses:
  *       201:
  *         description: Purchase successful
@@ -100,7 +109,14 @@ async function createNotification(
  *         description: Purchase failed
  */
 router.post("/purchase", authenticateToken, requireBuyer, async (req, res) => {
-  const { beat_id, license_id, payment_method_id, use_wallet } = req.body;
+  const {
+    beat_id,
+    license_id,
+    payment_method_id,
+    use_wallet,
+    currency,
+    display_amount,
+  } = req.body;
   const buyerId = req.user.id;
   const db = getDB();
 
@@ -109,6 +125,10 @@ router.post("/purchase", authenticateToken, requireBuyer, async (req, res) => {
       .status(400)
       .json({ error: "Missing required fields: beat_id, license_id" });
   }
+
+  // Currency defaults to USD if not provided
+  const purchaseCurrency = currency || "USD";
+  const purchaseDisplayAmount = display_amount;
 
   try {
     // ✅ STEP 0: Get buyer's wallet balance
@@ -217,7 +237,7 @@ router.post("/purchase", authenticateToken, requireBuyer, async (req, res) => {
                       `💳 Payment breakdown: Total=$${price}, Wallet=$${walletAmount}, Card=$${cardAmount}`,
                     );
 
-                    // ✅ STEP 5: Deduct from wallet if using wallet balance
+                    // ✅ STEP 5: Deduct from wallet if using wallet balance and process card payment
                     const processPayment = async () => {
                       if (walletAmount > 0) {
                         try {
@@ -227,6 +247,7 @@ router.post("/purchase", authenticateToken, requireBuyer, async (req, res) => {
                             `Purchase: ${license.name} for beat #${beat_id}`,
                             "purchase",
                             null, // Will be updated with purchase_id after creation
+                            "USD", // Wallet is always in USD
                           );
                           console.log(
                             `✅ Deducted $${walletAmount} from wallet`,
@@ -238,12 +259,41 @@ router.post("/purchase", authenticateToken, requireBuyer, async (req, res) => {
                         }
                       }
 
-                      // TODO: Process card payment for cardAmount (mock for now)
+                      // Process card payment for remaining amount
                       if (cardAmount > 0) {
-                        console.log(
-                          `✅ Processed card payment: $${cardAmount}`,
-                        );
+                        if (!payment_method_id) {
+                          throw new Error(
+                            "Payment method required for card payment",
+                          );
+                        }
+
+                        try {
+                          const paymentResult = await processGatewayPayment({
+                            amount: purchaseDisplayAmount
+                              ? (cardAmount / price) * purchaseDisplayAmount
+                              : cardAmount,
+                            currency: purchaseCurrency,
+                            paymentMethodId: payment_method_id,
+                            description: `Purchase: ${license.name} for beat #${beat_id}`,
+                          });
+
+                          if (!paymentResult.success) {
+                            throw new Error("Card payment failed");
+                          }
+
+                          console.log(
+                            `✅ Processed card payment: ${purchaseCurrency} ${paymentResult.amount} (USD $${cardAmount})`,
+                          );
+
+                          return paymentResult;
+                        } catch (paymentErr) {
+                          throw new Error(
+                            `Card payment failed: ${paymentErr.message}`,
+                          );
+                        }
                       }
+
+                      return null;
                     };
 
                     // Process payment first
@@ -254,9 +304,9 @@ router.post("/purchase", authenticateToken, requireBuyer, async (req, res) => {
                           `INSERT INTO purchases (
                               buyer_id, beat_id, license_id, price, commission,
                               seller_earnings, payout_status, withdrawal_id,
-                              hold_until
+                              hold_until, currency, display_amount
                             )
-                            VALUES (?, ?, ?, ?, ?, ?, 'unpaid', NULL, DATETIME('now', '+' || ? || ' days'))`,
+                            VALUES (?, ?, ?, ?, ?, ?, 'unpaid', NULL, DATETIME('now', '+' || ? || ' days'), ?, ?)`,
                           [
                             buyerId,
                             beat_id,
@@ -265,6 +315,8 @@ router.post("/purchase", authenticateToken, requireBuyer, async (req, res) => {
                             commission,
                             seller_earnings,
                             HOLD_DAYS,
+                            purchaseCurrency,
+                            purchaseDisplayAmount || price,
                           ],
                           function (err5) {
                             if (err5) {
@@ -311,6 +363,12 @@ router.post("/purchase", authenticateToken, requireBuyer, async (req, res) => {
                               payment_breakdown: {
                                 total: price,
                                 wallet_used: walletAmount,
+                                currency: {
+                                  code: purchaseCurrency,
+                                  display_amount:
+                                    purchaseDisplayAmount || price,
+                                  usd_amount: price,
+                                },
                                 card_charged: cardAmount,
                               },
                               hold_until_date: `${HOLD_DAYS} days from now`,
@@ -402,6 +460,8 @@ router.get("/purchases", authenticateToken, requireBuyer, (req, res) => {
       p.purchased_at,
       p.refund_status,
       p.refunded_at,
+      p.currency,
+      p.display_amount,
       b.id AS beat_id,
       b.title AS beat_title,
       b.genre,

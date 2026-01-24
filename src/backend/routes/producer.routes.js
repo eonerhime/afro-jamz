@@ -952,6 +952,7 @@ router.put("/beats/:id", authenticateToken, requireProducer, (req, res) => {
     duration,
     tags,
     description,
+    cover_art_url,
     licenses,
   } = req.body;
   const db = getDB();
@@ -1002,6 +1003,10 @@ router.put("/beats/:id", authenticateToken, requireProducer, (req, res) => {
       if (description) {
         updates.push("description = ?");
         values.push(description);
+      }
+      if (cover_art_url !== undefined) {
+        updates.push("cover_art_url = ?");
+        values.push(cover_art_url);
       }
 
       // Handle beat field updates
