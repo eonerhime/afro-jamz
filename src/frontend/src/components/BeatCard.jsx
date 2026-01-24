@@ -1,9 +1,18 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import PropTypes from "prop-types";
+import { useCurrency } from "../hooks/useCurrency";
+import {
+  convertCurrency,
+  formatPrice as formatCurrencyPrice,
+} from "../utils/currency";
+
+const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:3001";
 
 export default function BeatCard({ beat, onPlay, isPlaying }) {
   const [isLiked, setIsLiked] = useState(false);
+  const [imageError, setImageError] = useState(false);
+  const { currency } = useCurrency();
 
   const handlePlayClick = (e) => {
     e.preventDefault();
@@ -17,32 +26,48 @@ export default function BeatCard({ beat, onPlay, isPlaying }) {
   };
 
   const formatDuration = (seconds) => {
+    if (!seconds || isNaN(seconds)) return "0:00";
     const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
+    const secs = Math.floor(seconds % 60);
     return `${mins}:${secs.toString().padStart(2, "0")}`;
   };
 
-  const formatPrice = (price) => {
-    return new Intl.NumberFormat("en-US", {
-      style: "currency",
-      currency: "USD",
-    }).format(price);
+  const formatPrice = (usdPrice) => {
+    if (!usdPrice || isNaN(usdPrice)) return "Free";
+    const convertedPrice = convertCurrency(usdPrice, currency);
+    return formatCurrencyPrice(convertedPrice, currency);
   };
+
+  // Construct full image URL
+  const imageUrl = `${API_BASE_URL}${beat.cover_art_url}`;
+
+  console.log("Beat:", beat.title, "Image URL:", imageUrl);
 
   return (
     <div className="group bg-white rounded-lg shadow-sm hover:shadow-xl transition-all duration-300 overflow-hidden border border-gray-100 hover:border-primary-500">
       {/* Cover Art with Play Overlay */}
-      <div className="relative aspect-square bg-gray-200 overflow-hidden">
-        {beat.cover_art_url ? (
+      <div
+        className="relative w-full overflow-hidden bg-linear-to-br from-primary-100 to-secondary-100"
+        style={{ paddingBottom: "100%" }}
+      >
+        {beat.cover_art_url && (
           <img
-            src={beat.cover_art_url}
+            src={imageUrl}
             alt={beat.title}
-            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+            className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+            onLoad={() => console.log("Image loaded successfully:", imageUrl)}
+            onError={(e) => {
+              console.error("Image load failed for:", e.target.src);
+              setImageError(true);
+            }}
           />
-        ) : (
-          <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-primary-400 to-secondary-500">
+        )}
+
+        {/* Fallback icon if no image */}
+        {(!beat.cover_art_url || imageError) && (
+          <div className="absolute inset-0 flex items-center justify-center">
             <svg
-              className="w-20 h-20 text-white opacity-50"
+              className="w-20 h-20 text-primary-300"
               fill="currentColor"
               viewBox="0 0 20 20"
             >
@@ -52,10 +77,10 @@ export default function BeatCard({ beat, onPlay, isPlaying }) {
         )}
 
         {/* Play Button Overlay */}
-        <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-40 transition-all duration-300 flex items-center justify-center">
+        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
           <button
             onClick={handlePlayClick}
-            className="transform scale-0 group-hover:scale-100 transition-transform duration-300 bg-white rounded-full p-4 shadow-lg hover:bg-primary-500 hover:text-white"
+            className="pointer-events-auto transform scale-0 group-hover:scale-100 transition-transform duration-300 bg-white rounded-full p-4 shadow-lg hover:bg-primary-500 hover:text-white"
             aria-label={isPlaying ? "Pause" : "Play"}
           >
             {isPlaying ? (
@@ -172,9 +197,9 @@ export default function BeatCard({ beat, onPlay, isPlaying }) {
         {/* Price */}
         <div className="mb-3">
           <p className="text-xl font-bold text-primary-600">
-            {beat.base_price ? formatPrice(beat.base_price) : "Free"}
+            {beat.min_price ? formatPrice(beat.min_price) : "Free"}
           </p>
-          {beat.base_price && (
+          {beat.min_price && (
             <p className="text-xs text-gray-500">Starting price</p>
           )}
         </div>
@@ -222,7 +247,7 @@ BeatCard.propTypes = {
     bpm: PropTypes.number,
     key_signature: PropTypes.string,
     duration: PropTypes.number,
-    base_price: PropTypes.number,
+    min_price: PropTypes.number,
   }).isRequired,
   onPlay: PropTypes.func.isRequired,
   isPlaying: PropTypes.bool,
