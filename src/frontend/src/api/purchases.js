@@ -3,6 +3,10 @@ import apiClient from "./client";
 export const purchasesAPI = {
   // Purchase a beat
   create: async (purchaseData) => {
+    // purchaseData should include: { beat_id, license_id, currency, display_amount }
+    // - currency: The currency code the user is viewing prices in (e.g., 'EUR', 'NGN')
+    // - display_amount: The price in the user's selected currency
+    // Backend will store both the display amount and convert to USD for seller payouts
     const response = await apiClient.post("/api/buyer/purchases", purchaseData);
     return response.data;
   },

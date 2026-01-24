@@ -1,5 +1,6 @@
 import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "./context/AuthContext";
+import { CurrencyProvider } from "./contexts/CurrencyContext";
 import { ProtectedRoute } from "./components/ProtectedRoute";
 
 // Pages (will create these next)
@@ -16,35 +17,37 @@ function App() {
   return (
     <Router>
       <AuthProvider>
-        <Routes>
-          {/* Public routes */}
-          <Route path="/" element={<HomePage />} />
-          <Route path="/login" element={<LoginPage />} />
-          <Route path="/register" element={<RegisterPage />} />
-          <Route path="/oauth/callback" element={<OAuthCallbackPage />} />
-          <Route path="/beats" element={<BrowseBeats />} />
-          <Route path="/beats/:id" element={<BeatDetailPage />} />
+        <CurrencyProvider>
+          <Routes>
+            {/* Public routes */}
+            <Route path="/" element={<HomePage />} />
+            <Route path="/login" element={<LoginPage />} />
+            <Route path="/register" element={<RegisterPage />} />
+            <Route path="/oauth/callback" element={<OAuthCallbackPage />} />
+            <Route path="/beats" element={<BrowseBeats />} />
+            <Route path="/beats/:id" element={<BeatDetailPage />} />
 
-          {/* Producer routes */}
-          <Route
-            path="/producer/dashboard"
-            element={
-              <ProtectedRoute requiredRole="producer">
-                <ProducerDashboard />
-              </ProtectedRoute>
-            }
-          />
+            {/* Producer routes */}
+            <Route
+              path="/producer/dashboard"
+              element={
+                <ProtectedRoute requiredRole="producer">
+                  <ProducerDashboard />
+                </ProtectedRoute>
+              }
+            />
 
-          {/* Buyer routes */}
-          <Route
-            path="/buyer/dashboard"
-            element={
-              <ProtectedRoute requiredRole="buyer">
-                <BuyerDashboard />
-              </ProtectedRoute>
-            }
-          />
-        </Routes>
+            {/* Buyer routes */}
+            <Route
+              path="/buyer/dashboard"
+              element={
+                <ProtectedRoute requiredRole="buyer">
+                  <BuyerDashboard />
+                </ProtectedRoute>
+              }
+            />
+          </Routes>
+        </CurrencyProvider>
       </AuthProvider>
     </Router>
   );
