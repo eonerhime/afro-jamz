@@ -54,7 +54,7 @@ export default function BeatCard({ beat, onPlay, isPlaying }) {
           <img
             src={imageUrl}
             alt={beat.title}
-            className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+            className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-300 z-0"
             onLoad={() => console.log("Image loaded successfully:", imageUrl)}
             onError={(e) => {
               console.error("Image load failed for:", e.target.src);
@@ -65,7 +65,7 @@ export default function BeatCard({ beat, onPlay, isPlaying }) {
 
         {/* Fallback icon if no image */}
         {(!beat.cover_art_url || imageError) && (
-          <div className="absolute inset-0 flex items-center justify-center">
+          <div className="absolute inset-0 flex items-center justify-center z-0">
             <svg
               className="w-20 h-20 text-primary-300"
               fill="currentColor"
@@ -77,7 +77,7 @@ export default function BeatCard({ beat, onPlay, isPlaying }) {
         )}
 
         {/* Play Button Overlay */}
-        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+        <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10">
           <button
             onClick={handlePlayClick}
             className="pointer-events-auto transform scale-0 group-hover:scale-100 transition-transform duration-300 bg-white rounded-full p-4 shadow-lg hover:bg-primary-500 hover:text-white"

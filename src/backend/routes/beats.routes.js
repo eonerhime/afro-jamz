@@ -62,7 +62,7 @@ router.get("/", (req, res) => {
       return res.status(500).json({ error: "Database error" });
     }
 
-    // Update cover_art_url to use local files
+    // Update cover_art_url and audio URLs to use local files
     const updatedBeats = beats.map((beat) => {
       if (
         beat.cover_art_url &&
@@ -71,6 +71,21 @@ router.get("/", (req, res) => {
         const filename = beat.cover_art_url.split("/").pop();
         beat.cover_art_url = `/audio/covers/${filename}`;
       }
+
+      // Update preview_url to local audio files
+      if (beat.preview_url && beat.preview_url.includes("cdn.afrobeatz.com")) {
+        const filename = beat.preview_url.split("/").pop();
+        // Convert .mp3 extension if needed
+        beat.preview_url = `/audio/${filename.replace(".mp3", ".mp3")}`;
+      }
+
+      // Update full_url to local audio files
+      if (beat.full_url && beat.full_url.includes("cdn.afrobeatz.com")) {
+        const filename = beat.full_url.split("/").pop();
+        // Use mp3 instead of wav for local files
+        beat.full_url = `/audio/${filename.replace(".wav", ".mp3")}`;
+      }
+
       return beat;
     });
 
