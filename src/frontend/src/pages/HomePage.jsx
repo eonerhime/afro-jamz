@@ -5,7 +5,7 @@ export default function HomePage() {
   const { isAuthenticated, user } = useAuth();
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-primary-50 via-secondary-50 to-accent-50">
+    <div className="min-h-screen bg-linear-to-br from-primary-50 via-secondary-50 to-accent-50">
       {/* Navigation */}
       <nav className="bg-white/90 backdrop-blur-sm shadow-md sticky top-0 z-40">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -16,7 +16,7 @@ export default function HomePage() {
                 alt="AfroJamz"
                 className="w-10 h-10 rounded-lg"
               />
-              <h1 className="text-2xl font-bold bg-gradient-to-r from-primary-600 to-secondary-600 bg-clip-text text-transparent">
+              <h1 className="text-2xl font-bold text-primary-600">
                 AfroJamz
               </h1>
             </div>
@@ -50,7 +50,7 @@ export default function HomePage() {
                   </Link>
                   <Link
                     to="/register"
-                    className="bg-gradient-to-r from-primary-500 to-secondary-500 text-white px-6 py-2 rounded-lg hover:from-primary-600 hover:to-secondary-600 font-medium shadow-md hover:shadow-lg transition-all"
+                    className="bg-linear-to-r from-primary-500 to-secondary-500 text-white px-6 py-2 rounded-lg hover:from-primary-600 hover:to-secondary-600 font-medium shadow-md hover:shadow-lg transition-all"
                   >
                     Sign Up
                   </Link>
@@ -64,7 +64,7 @@ export default function HomePage() {
       {/* Hero Section */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-20">
         <div className="text-center mb-16">
-          <h2 className="text-6xl font-bold mb-6 bg-gradient-to-r from-primary-600 via-secondary-600 to-accent-600 bg-clip-text text-transparent">
+          <h2 className="text-6xl font-bold mb-6 text-gray-900">
             Where African Beats
             <br />
             Meet The World
@@ -76,7 +76,7 @@ export default function HomePage() {
           <div className="flex gap-6 justify-center flex-wrap">
             <Link
               to="/beats"
-              className="bg-gradient-to-r from-primary-500 to-secondary-500 text-white px-10 py-4 rounded-xl text-lg font-semibold hover:from-primary-600 hover:to-secondary-600 shadow-xl hover:shadow-2xl transform hover:-translate-y-1 transition-all"
+              className="bg-linear-to-r from-primary-500 to-secondary-500 text-white px-10 py-4 rounded-xl text-lg font-semibold hover:from-primary-600 hover:to-secondary-600 shadow-xl hover:shadow-2xl transform hover:-translate-y-1 transition-all"
             >
               🎵 Explore Beats
             </Link>
@@ -94,7 +94,7 @@ export default function HomePage() {
         {/* Features Section */}
         <div className="grid md:grid-cols-3 gap-8 mt-24">
           <div className="bg-white rounded-2xl p-8 shadow-lg hover:shadow-xl transition-shadow border-t-4 border-primary-500">
-            <div className="w-16 h-16 bg-gradient-to-br from-primary-500 to-primary-600 rounded-xl flex items-center justify-center mb-4">
+            <div className="w-16 h-16 bg-linear-to-br from-primary-500 to-primary-600 rounded-xl flex items-center justify-center mb-4">
               <svg
                 className="w-8 h-8 text-white"
                 fill="currentColor"
@@ -118,7 +118,7 @@ export default function HomePage() {
           </div>
 
           <div className="bg-white rounded-2xl p-8 shadow-lg hover:shadow-xl transition-shadow border-t-4 border-secondary-500">
-            <div className="w-16 h-16 bg-gradient-to-br from-secondary-500 to-secondary-600 rounded-xl flex items-center justify-center mb-4">
+            <div className="w-16 h-16 bg-linear-to-br from-secondary-500 to-secondary-600 rounded-xl flex items-center justify-center mb-4">
               <svg
                 className="w-8 h-8 text-white"
                 fill="currentColor"
@@ -141,7 +141,7 @@ export default function HomePage() {
           </div>
 
           <div className="bg-white rounded-2xl p-8 shadow-lg hover:shadow-xl transition-shadow border-t-4 border-accent-500">
-            <div className="w-16 h-16 bg-gradient-to-br from-accent-500 to-accent-600 rounded-xl flex items-center justify-center mb-4">
+            <div className="w-16 h-16 bg-linear-to-br from-accent-500 to-accent-600 rounded-xl flex items-center justify-center mb-4">
               <svg
                 className="w-8 h-8 text-white"
                 fill="currentColor"
@@ -161,7 +161,7 @@ export default function HomePage() {
         </div>
 
         {/* Stats Section */}
-        <div className="mt-24 bg-gradient-to-r from-primary-500 via-secondary-500 to-accent-500 rounded-3xl p-12 text-white shadow-2xl">
+        <div className="mt-24 bg-linear-to-r from-primary-500 via-secondary-500 to-accent-500 rounded-3xl p-12 text-white shadow-2xl">
           <div className="grid md:grid-cols-3 gap-8 text-center">
             <div>
               <div className="text-5xl font-bold mb-2">1,000+</div>
@@ -189,7 +189,7 @@ export default function HomePage() {
           </p>
           <Link
             to="/beats"
-            className="inline-block bg-gradient-to-r from-primary-500 to-secondary-500 text-white px-12 py-4 rounded-xl text-xl font-semibold hover:from-primary-600 hover:to-secondary-600 shadow-xl hover:shadow-2xl transform hover:-translate-y-1 transition-all"
+            className="inline-block bg-linear-to-r from-primary-500 to-secondary-500 text-white px-12 py-4 rounded-xl text-xl font-semibold hover:from-primary-600 hover:to-secondary-600 shadow-xl hover:shadow-2xl transform hover:-translate-y-1 transition-all"
           >
             Start Browsing Now →
           </Link>
