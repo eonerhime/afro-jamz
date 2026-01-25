@@ -28,7 +28,7 @@ export default function BeatCard({ beat, onPlay, isPlaying }) {
   const formatDuration = (duration) => {
     if (!duration) return "0:00";
     // If duration is already a string (e.g., '3:30'), return it
-    if (typeof duration === 'string') return duration;
+    if (typeof duration === "string") return duration;
     // Otherwise format from seconds
     if (isNaN(duration)) return "0:00";
     const mins = Math.floor(duration / 60);
@@ -84,7 +84,7 @@ export default function BeatCard({ beat, onPlay, isPlaying }) {
         <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10">
           <button
             onClick={handlePlayClick}
-            className="pointer-events-auto transform scale-0 group-hover:scale-100 transition-transform duration-300 bg-primary-500 text-white rounded-full p-4 shadow-lg hover:bg-primary-600 hover:scale-110"
+            className="pointer-events-auto cursor-pointer transform scale-0 group-hover:scale-100 transition-transform duration-300 bg-primary-500 text-white rounded-full p-4 shadow-lg hover:bg-primary-600 hover:scale-110"
             aria-label={isPlaying ? "Pause" : "Play"}
           >
             {isPlaying ? (
@@ -212,12 +212,12 @@ export default function BeatCard({ beat, onPlay, isPlaying }) {
         <div className="flex gap-2">
           <Link
             to={`/beats/${beat.id}`}
-            className="flex-1 bg-primary-600 hover:bg-primary-700 text-white px-4 py-2 rounded-lg font-medium text-center transition-colors"
+            className="flex-1 bg-primary-500 hover:bg-primary-600 text-white px-4 py-2 rounded-lg font-medium text-center transition-colors cursor-pointer"
           >
             View Licenses
           </Link>
           <button
-            className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+            className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors cursor-pointer"
             aria-label="Add to cart"
           >
             <svg
