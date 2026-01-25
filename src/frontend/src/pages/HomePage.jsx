@@ -12,7 +12,7 @@ export default function HomePage() {
           <div className="flex justify-between h-16 items-center">
             <div className="flex items-center gap-2">
               <img
-                src="/afro-beats.png"
+                src="/afro-jamz.png"
                 alt="AfroJamz"
                 className="w-10 h-10 rounded-lg"
               />
@@ -50,7 +50,7 @@ export default function HomePage() {
                   </Link>
                   <Link
                     to="/register"
-                    className="bg-gradient-to-r from-primary-600 to-secondary-600 text-white px-6 py-2 rounded-lg hover:from-primary-700 hover:to-secondary-700 font-medium shadow-md hover:shadow-lg transition-all"
+                    className="bg-gradient-to-r from-primary-500 to-secondary-500 text-white px-6 py-2 rounded-lg hover:from-primary-600 hover:to-secondary-600 font-medium shadow-md hover:shadow-lg transition-all"
                   >
                     Sign Up
                   </Link>
@@ -76,14 +76,14 @@ export default function HomePage() {
           <div className="flex gap-6 justify-center flex-wrap">
             <Link
               to="/beats"
-              className="bg-gradient-to-r from-primary-600 to-secondary-600 text-white px-10 py-4 rounded-xl text-lg font-semibold hover:from-primary-700 hover:to-secondary-700 shadow-xl hover:shadow-2xl transform hover:-translate-y-1 transition-all"
+              className="bg-gradient-to-r from-primary-500 to-secondary-500 text-white px-10 py-4 rounded-xl text-lg font-semibold hover:from-primary-600 hover:to-secondary-600 shadow-xl hover:shadow-2xl transform hover:-translate-y-1 transition-all"
             >
               🎵 Explore Beats
             </Link>
             {!isAuthenticated && (
               <Link
                 to="/register"
-                className="border-2 border-primary-600 text-primary-600 px-10 py-4 rounded-xl text-lg font-semibold hover:bg-primary-50 shadow-lg hover:shadow-xl transform hover:-translate-y-1 transition-all"
+                className="border-2 border-primary-500 text-primary-600 px-10 py-4 rounded-xl text-lg font-semibold hover:bg-primary-50 shadow-lg hover:shadow-xl transform hover:-translate-y-1 transition-all"
               >
                 🎹 Start Selling
               </Link>
@@ -161,7 +161,7 @@ export default function HomePage() {
         </div>
 
         {/* Stats Section */}
-        <div className="mt-24 bg-gradient-to-r from-primary-600 via-secondary-600 to-accent-600 rounded-3xl p-12 text-white shadow-2xl">
+        <div className="mt-24 bg-gradient-to-r from-primary-500 via-secondary-500 to-accent-500 rounded-3xl p-12 text-white shadow-2xl">
           <div className="grid md:grid-cols-3 gap-8 text-center">
             <div>
               <div className="text-5xl font-bold mb-2">1,000+</div>
@@ -189,7 +189,7 @@ export default function HomePage() {
           </p>
           <Link
             to="/beats"
-            className="inline-block bg-gradient-to-r from-primary-600 to-secondary-600 text-white px-12 py-4 rounded-xl text-xl font-semibold hover:from-primary-700 hover:to-secondary-700 shadow-xl hover:shadow-2xl transform hover:-translate-y-1 transition-all"
+            className="inline-block bg-gradient-to-r from-primary-500 to-secondary-500 text-white px-12 py-4 rounded-xl text-xl font-semibold hover:from-primary-600 hover:to-secondary-600 shadow-xl hover:shadow-2xl transform hover:-translate-y-1 transition-all"
           >
             Start Browsing Now →
           </Link>
@@ -201,7 +201,7 @@ export default function HomePage() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
           <div className="flex items-center justify-center gap-2 mb-4">
             <img
-              src="/afro-beats.png"
+              src="/afro-jamz.png"
               alt="AfroJamz"
               className="w-8 h-8 rounded-lg"
             />
