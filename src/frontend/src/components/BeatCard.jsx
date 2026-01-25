@@ -44,7 +44,7 @@ export default function BeatCard({ beat, onPlay, isPlaying }) {
   console.log("Beat:", beat.title, "Image URL:", imageUrl);
 
   return (
-    <div className="group bg-white rounded-lg shadow-sm hover:shadow-xl transition-all duration-300 overflow-hidden border border-gray-100 hover:border-primary-500">
+    <div className="group relative bg-white rounded-lg shadow-sm hover:shadow-xl transition-all duration-300 overflow-hidden border border-gray-100 hover:border-primary-500 z-0">
       {/* Cover Art with Play Overlay */}
       <div
         className="relative w-full overflow-hidden bg-gradient-to-br from-primary-100 to-secondary-100"
