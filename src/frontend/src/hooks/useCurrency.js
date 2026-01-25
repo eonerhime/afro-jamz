@@ -1,13 +1,12 @@
-import { useState, useEffect } from "react";
+import { useContext, createContext } from "react";
+
+// Export the context so CurrencyProvider can use it
+export const CurrencyContext = createContext();
 
 export function useCurrency() {
-  const [currency, setCurrency] = useState(() => {
-    return localStorage.getItem("currency") || "USD";
-  });
-
-  useEffect(() => {
-    localStorage.setItem("currency", currency);
-  }, [currency]);
-
-  return { currency, setCurrency };
+  const context = useContext(CurrencyContext);
+  if (!context) {
+    throw new Error("useCurrency must be used within a CurrencyProvider");
+  }
+  return context;
 }

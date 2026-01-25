@@ -1,5 +1,6 @@
 import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "./context/AuthContext";
+import { CurrencyProvider } from "./contexts/CurrencyContext";
 import { ProtectedRoute } from "./components/ProtectedRoute";
 
 // Pages
@@ -14,9 +15,9 @@ import BuyerDashboard from "./pages/BuyerDashboard";
 
 function App() {
   return (
-    <div className="min-h-screen bg-white">
-      <Router>
-        <AuthProvider>
+    <Router>
+      <AuthProvider>
+        <CurrencyProvider>
           <Routes>
             {/* Public routes */}
             <Route path="/" element={<HomePage />} />
@@ -46,9 +47,9 @@ function App() {
               }
             />
           </Routes>
-        </AuthProvider>
-      </Router>
-    </div>
+        </CurrencyProvider>
+      </AuthProvider>
+    </Router>
   );
 }
 
