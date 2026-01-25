@@ -16,7 +16,7 @@ export default function HomePage() {
                 alt="AfroJamz"
                 className="w-10 h-10 rounded-lg"
               />
-              <h1 className="text-2xl font-bold text-primary-600">
+              <h1 className="text-2xl font-bold bg-linear-to-r from-primary-600 to-secondary-600 bg-clip-text text-transparent">
                 AfroJamz
               </h1>
             </div>
@@ -64,7 +64,7 @@ export default function HomePage() {
       {/* Hero Section */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-20">
         <div className="text-center mb-16">
-          <h2 className="text-6xl font-bold mb-6 text-gray-900">
+          <h2 className="text-6xl font-bold mb-6 bg-linear-to-r from-primary-600 via-secondary-600 to-accent-600 bg-clip-text text-transparent">
             Where African Beats
             <br />
             Meet The World
