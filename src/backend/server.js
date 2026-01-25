@@ -7,7 +7,12 @@ import rateLimit from "express-rate-limit";
 import winston from "winston";
 import swaggerUi from "swagger-ui-express";
 import swaggerJSDoc from "swagger-jsdoc";
+import path from "path";
+import { fileURLToPath } from "url";
 import authRoutes from "./routes/auth.routes.js";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 import producerRoutes from "./routes/producer.routes.js";
 import purchasesRoutes from "./routes/purchases.routes.js";
 import licensesRoutes from "./routes/licenses.routes.js";
@@ -26,7 +31,9 @@ app.use(helmet());
 app.use(morgan("combined"));
 
 // Serve static audio files (protected by routes)
-app.use("/audio", express.static("./src/backend/audio"));
+const audioPath = path.join(__dirname, "audio");
+app.use("/audio", express.static(audioPath));
+console.log(`📁 Serving static audio files from: ${audioPath}`);
 
 // Initialize database
 initializeDB();
