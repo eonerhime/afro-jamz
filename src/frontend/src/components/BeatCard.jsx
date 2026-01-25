@@ -47,7 +47,7 @@ export default function BeatCard({ beat, onPlay, isPlaying }) {
     <div className="group bg-white rounded-lg shadow-sm hover:shadow-xl transition-all duration-300 overflow-hidden border border-gray-100 hover:border-primary-500">
       {/* Cover Art with Play Overlay */}
       <div
-        className="relative w-full overflow-hidden bg-linear-to-br from-primary-100 to-secondary-100"
+        className="relative w-full overflow-hidden bg-gradient-to-br from-primary-100 to-secondary-100"
         style={{ paddingBottom: "100%" }}
       >
         {beat.cover_art_url && (
