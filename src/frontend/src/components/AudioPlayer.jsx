@@ -75,7 +75,6 @@ export default function CustomAudioPlayer({
           onClickNext={onNext}
           autoPlayAfterSrcChange={true}
           customAdditionalControls={[]}
-          customVolumeControls={[]}
           layout="horizontal-reverse"
           className="shadow-none"
         />
