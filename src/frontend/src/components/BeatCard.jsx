@@ -25,10 +25,14 @@ export default function BeatCard({ beat, onPlay, isPlaying }) {
     // TODO: Call API to like/unlike beat
   };
 
-  const formatDuration = (seconds) => {
-    if (!seconds || isNaN(seconds)) return "0:00";
-    const mins = Math.floor(seconds / 60);
-    const secs = Math.floor(seconds % 60);
+  const formatDuration = (duration) => {
+    if (!duration) return "0:00";
+    // If duration is already a string (e.g., '3:30'), return it
+    if (typeof duration === 'string') return duration;
+    // Otherwise format from seconds
+    if (isNaN(duration)) return "0:00";
+    const mins = Math.floor(duration / 60);
+    const secs = Math.floor(duration % 60);
     return `${mins}:${secs.toString().padStart(2, "0")}`;
   };
 
@@ -80,7 +84,7 @@ export default function BeatCard({ beat, onPlay, isPlaying }) {
         <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10">
           <button
             onClick={handlePlayClick}
-            className="pointer-events-auto transform scale-0 group-hover:scale-100 transition-transform duration-300 bg-white rounded-full p-4 shadow-lg hover:bg-primary-500 hover:text-white"
+            className="pointer-events-auto transform scale-0 group-hover:scale-100 transition-transform duration-300 bg-primary-500 text-white rounded-full p-4 shadow-lg hover:bg-primary-600 hover:scale-110"
             aria-label={isPlaying ? "Pause" : "Play"}
           >
             {isPlaying ? (
@@ -195,7 +199,7 @@ export default function BeatCard({ beat, onPlay, isPlaying }) {
         </div>
 
         {/* Price */}
-        <div className="mb-3">
+        <div className="mb-4">
           <p className="text-xl font-bold text-primary-600">
             {beat.min_price ? formatPrice(beat.min_price) : "Free"}
           </p>
