@@ -33,9 +33,13 @@ router.get("/", (req, res) => {
   const db = getDB();
 
   let sql = `
-    SELECT beats.*, users.username AS producer_name
+    SELECT 
+      beats.*, 
+      users.username AS producer_name,
+      MIN(beat_licenses.price) as min_price
     FROM beats
     LEFT JOIN users ON beats.producer_id = users.id
+    LEFT JOIN beat_licenses ON beats.id = beat_licenses.beat_id
     WHERE beats.is_active = 1 AND beats.status = 'enabled'
   `;
   const params = [];
@@ -50,14 +54,27 @@ router.get("/", (req, res) => {
     params.push(`%${search}%`, `%${search}%`);
   }
 
-  sql += ` ORDER BY beats.created_at DESC`;
+  sql += ` GROUP BY beats.id ORDER BY beats.created_at DESC`;
 
   db.all(sql, params, (err, beats) => {
     if (err) {
       console.error("Database error:", err);
       return res.status(500).json({ error: "Database error" });
     }
-    res.json({ beats });
+
+    // Update cover_art_url to use local files
+    const updatedBeats = beats.map((beat) => {
+      if (
+        beat.cover_art_url &&
+        beat.cover_art_url.includes("cdn.afrobeatz.com")
+      ) {
+        const filename = beat.cover_art_url.split("/").pop();
+        beat.cover_art_url = `/audio/covers/${filename}`;
+      }
+      return beat;
+    });
+
+    res.json({ beats: updatedBeats });
   });
 });
 
