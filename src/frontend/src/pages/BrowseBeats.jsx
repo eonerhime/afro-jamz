@@ -285,7 +285,7 @@ export default function BrowseBeats() {
         <div className="lg:grid lg:grid-cols-[256px_1fr] lg:gap-8">
           {/* Filter Sidebar - Desktop (Fixed) */}
           <aside className="hidden lg:block">
-            <div className="lg:fixed lg:top-[212px] lg:w-64 lg:max-h-[calc(100vh-212px)] lg:overflow-y-auto">
+            <div className="lg:fixed lg:top-53 lg:w-64 lg:max-h-[calc(100vh-212px)] lg:overflow-y-auto scrollbar-thin scrollbar-thumb-gray-400 dark:scrollbar-thumb-gray-600 scrollbar-track-gray-100 dark:scrollbar-track-gray-800 hover:scrollbar-thumb-gray-500 dark:hover:scrollbar-thumb-gray-500">
               <FilterSidebar onFilterChange={handleFilterChange} />
             </div>
           </aside>

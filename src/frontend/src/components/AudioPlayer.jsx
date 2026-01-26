@@ -36,7 +36,7 @@ export default function CustomAudioPlayer({
       <div className="max-w-7xl mx-auto px-2 sm:px-4 py-2 sm:py-3">
         {/* Beat Info */}
         <div className="flex items-center gap-2 sm:gap-4 mb-2">
-          <div className="w-10 h-10 sm:w-12 sm:h-12 bg-gray-200 rounded overflow-hidden shrink-0">
+          <div className="w-10 h-10 sm:w-12 sm:h-12 bg-gray-200 dark:bg-gray-700 rounded overflow-hidden shrink-0">
             {currentBeat.cover_art_url ? (
               <img
                 src={`${API_BASE_URL}${currentBeat.cover_art_url}`}
@@ -56,10 +56,10 @@ export default function CustomAudioPlayer({
             )}
           </div>
           <div className="flex-1 min-w-0">
-            <h4 className="text-xs sm:text-sm font-semibold text-gray-900 truncate">
+            <h4 className="text-xs sm:text-sm font-semibold text-gray-900 dark:text-white truncate">
               {currentBeat.title}
             </h4>
-            <p className="text-xs text-gray-600 truncate">
+            <p className="text-xs text-gray-600 dark:text-gray-400 truncate">
               {currentBeat.producer_name || "Unknown Producer"}
             </p>
           </div>
