@@ -32,7 +32,7 @@ export default function CustomAudioPlayer({
       : null;
 
   return (
-    <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 shadow-lg z-50">
+    <div className="fixed bottom-0 left-0 right-0 bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 shadow-lg z-50">
       <div className="max-w-7xl mx-auto px-2 sm:px-4 py-2 sm:py-3">
         {/* Beat Info */}
         <div className="flex items-center gap-2 sm:gap-4 mb-2">
@@ -44,7 +44,7 @@ export default function CustomAudioPlayer({
                 className="w-full h-full object-cover"
               />
             ) : (
-              <div className="w-full h-full bg-gradient-to-br from-primary-400 to-secondary-500 flex items-center justify-center">
+              <div className="w-full h-full bg-linear-to-br from-primary-400 to-secondary-500 flex items-center justify-center">
                 <svg
                   className="w-5 h-5 sm:w-6 sm:h-6 text-white"
                   fill="currentColor"

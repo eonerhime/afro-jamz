@@ -48,10 +48,10 @@ export default function BeatCard({ beat, onPlay, isPlaying }) {
   console.log("Beat:", beat.title, "Image URL:", imageUrl);
 
   return (
-    <div className="group relative bg-white rounded-lg shadow-sm hover:shadow-xl transition-all duration-300 overflow-hidden border border-gray-100 hover:border-primary-500 z-0">
+    <div className="group relative bg-white dark:bg-gray-800 rounded-lg shadow-sm hover:shadow-xl transition-all duration-300 overflow-hidden border border-gray-100 dark:border-gray-700 hover:border-primary-500 dark:hover:border-primary-400 z-0">
       {/* Cover Art with Play Overlay */}
       <div
-        className="relative w-full overflow-hidden bg-gradient-to-br from-primary-100 to-secondary-100"
+        className="relative w-full overflow-hidden bg-linear-to-br from-primary-100 to-secondary-100"
         style={{ paddingBottom: "100%" }}
       >
         {beat.cover_art_url && (
@@ -118,13 +118,13 @@ export default function BeatCard({ beat, onPlay, isPlaying }) {
         <div className="mb-2">
           <Link
             to={`/beats/${beat.id}`}
-            className="text-lg font-semibold text-gray-900 hover:text-primary-600 line-clamp-1"
+            className="text-lg font-semibold text-gray-900 dark:text-white hover:text-primary-600 dark:hover:text-primary-400 line-clamp-1"
           >
             {beat.title}
           </Link>
           <Link
             to={`/producer/${beat.producer_id}`}
-            className="text-sm text-gray-600 hover:text-primary-600 flex items-center mt-1"
+            className="text-sm text-gray-600 dark:text-gray-400 hover:text-primary-600 dark:hover:text-primary-400 flex items-center mt-1"
           >
             by {beat.producer_name || "Unknown Producer"}
             <button
@@ -153,9 +153,9 @@ export default function BeatCard({ beat, onPlay, isPlaying }) {
         </div>
 
         {/* Genre and BPM */}
-        <div className="flex items-center gap-2 text-sm text-gray-600 mb-2">
+        <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400 mb-2">
           {beat.genre && (
-            <span className="px-2 py-1 bg-primary-100 text-primary-700 rounded-full text-xs font-medium">
+            <span className="px-2 py-1 bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-400 rounded-full text-xs font-medium">
               {beat.genre}
             </span>
           )}
@@ -175,7 +175,7 @@ export default function BeatCard({ beat, onPlay, isPlaying }) {
         </div>
 
         {/* Duration and Key */}
-        <div className="flex items-center gap-3 text-sm text-gray-500 mb-3">
+        <div className="flex items-center gap-3 text-sm text-gray-500 dark:text-gray-400 mb-3">
           {beat.duration && (
             <span className="flex items-center gap-1">
               <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
@@ -200,11 +200,13 @@ export default function BeatCard({ beat, onPlay, isPlaying }) {
 
         {/* Price */}
         <div className="mb-4">
-          <p className="text-xl font-bold text-primary-600">
+          <p className="text-xl font-bold text-primary-600 dark:text-primary-400">
             {beat.min_price ? formatPrice(beat.min_price) : "Free"}
           </p>
           {beat.min_price && (
-            <p className="text-xs text-gray-500">Starting price</p>
+            <p className="text-xs text-gray-500 dark:text-gray-400">
+              Starting price
+            </p>
           )}
         </div>
 
@@ -217,11 +219,11 @@ export default function BeatCard({ beat, onPlay, isPlaying }) {
             View Licenses
           </Link>
           <button
-            className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors cursor-pointer"
+            className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors cursor-pointer"
             aria-label="Add to cart"
           >
             <svg
-              className="w-5 h-5 text-gray-600"
+              className="w-5 h-5 text-gray-600 dark:text-gray-400"
               fill="none"
               stroke="currentColor"
               viewBox="0 0 24 24"

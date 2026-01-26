@@ -1,39 +1,43 @@
 @import "tailwindcss";
 
+@variant dark (&:where(.dark, .dark *));
+
 @theme {
+  --color-scheme: light dark;
+
   /* Primary - Orange/Coral */
-  --color-primary-50: #FFF4ED;
-  --color-primary-100: #FFE6D5;
-  --color-primary-200: #FFC9AA;
-  --color-primary-300: #FFA574;
-  --color-primary-400: #FF7A3C;
-  --color-primary-500: #FF6B35;
-  --color-primary-600: #F04E16;
-  --color-primary-700: #C73B0D;
-  --color-primary-800: #9E3113;
-  --color-primary-900: #7F2D13;
+  --color-primary-50: #fff4ed;
+  --color-primary-100: #ffe6d5;
+  --color-primary-200: #ffc9aa;
+  --color-primary-300: #ffa574;
+  --color-primary-400: #ff7a3c;
+  --color-primary-500: #ff6b35;
+  --color-primary-600: #f04e16;
+  --color-primary-700: #c73b0d;
+  --color-primary-800: #9e3113;
+  --color-primary-900: #7f2d13;
 
   /* Secondary - Gold/Amber */
-  --color-secondary-50: #FEF9E7;
-  --color-secondary-100: #FEF3C3;
-  --color-secondary-200: #FDE58A;
-  --color-secondary-300: #FCD448;
-  --color-secondary-400: #FAC515;
-  --color-secondary-500: #F7931E;
-  --color-secondary-600: #D86F08;
-  --color-secondary-700: #B54F0B;
-  --color-secondary-800: #923D10;
+  --color-secondary-50: #fef9e7;
+  --color-secondary-100: #fef3c3;
+  --color-secondary-200: #fde58a;
+  --color-secondary-300: #fcd448;
+  --color-secondary-400: #fac515;
+  --color-secondary-500: #f7931e;
+  --color-secondary-600: #d86f08;
+  --color-secondary-700: #b54f0b;
+  --color-secondary-800: #923d10;
   --color-secondary-900: #783311;
 
   /* Accent - Teal/Turquoise */
-  --color-accent-50: #EDFAFA;
-  --color-accent-100: #D5F5F5;
-  --color-accent-200: #AFEBEB;
-  --color-accent-300: #7CDCDC;
-  --color-accent-400: #48C5C5;
-  --color-accent-500: #2EC4B6;
-  --color-accent-600: #229F93;
-  --color-accent-700: #207D75;
-  --color-accent-800: #20635E;
-  --color-accent-900: #1F524E;
+  --color-accent-50: #edfafa;
+  --color-accent-100: #d5f5f5;
+  --color-accent-200: #afebeb;
+  --color-accent-300: #7cdcdc;
+  --color-accent-400: #48c5c5;
+  --color-accent-500: #2ec4b6;
+  --color-accent-600: #229f93;
+  --color-accent-700: #207d75;
+  --color-accent-800: #20635e;
+  --color-accent-900: #1f524e;
 }

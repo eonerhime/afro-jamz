@@ -4,6 +4,7 @@ import BeatGrid from "../components/BeatGrid";
 import AudioPlayer from "../components/AudioPlayer";
 import CurrencySelector from "../components/CurrencySelector";
 import FilterSidebar from "../components/FilterSidebar";
+import ThemeToggle from "../components/ThemeToggle";
 import { useCurrency } from "../hooks/useCurrency";
 import { convertCurrency } from "../utils/currency";
 
@@ -145,21 +146,31 @@ export default function BrowseBeats() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
       {/* Header */}
-      <div className="bg-white border-b border-gray-200 sticky top-0 z-10">
+      <div className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 sticky top-0 z-10">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-6">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-4 gap-3">
-            <div>
-              <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">
+          <div className="mb-4 grid grid-cols-3 items-center gap-3">
+            {/* Left: Logo + Brand */}
+            <div className="flex items-center gap-2 sm:gap-3">
+              <img src="/afro-jamz.png" alt="AfroJamz" className="h-8 w-auto" />
+              <span className="hidden sm:inline text-lg font-bold text-gray-900 dark:text-white">
+                Afro Jamz
+              </span>
+            </div>
+            {/* Center: Title + Subtitle */}
+            <div className="text-center">
+              <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white">
                 Browse Beats
               </h1>
-              <p className="mt-1 sm:mt-2 text-sm sm:text-base text-gray-600">
+              <p className="mt-1 sm:mt-2 text-sm sm:text-base text-gray-600 dark:text-gray-400">
                 Discover the hottest Afrobeats, Amapiano, and more
               </p>
             </div>
-            <div className="flex items-center gap-2 sm:gap-4">
-              <span className="text-xs sm:text-sm text-gray-600">
+            {/* Right: Controls */}
+            <div className="flex justify-end items-center gap-2 sm:gap-4">
+              <ThemeToggle />
+              <span className="text-xs sm:text-sm text-gray-600 dark:text-gray-400">
                 Currency:
               </span>
               <CurrencySelector />
@@ -188,7 +199,7 @@ export default function BrowseBeats() {
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Search beats by title or producer..."
-              className="block w-full pl-10 pr-3 py-3 border border-gray-300 rounded-lg leading-5 bg-white placeholder-gray-500 focus:outline-none focus:placeholder-gray-400 focus:ring-2 focus:ring-primary-500 focus:border-transparent sm:text-sm"
+              className="block w-full pl-10 pr-3 py-3 border border-gray-300 dark:border-gray-600 rounded-lg leading-5 bg-white dark:bg-gray-700 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:placeholder-gray-400 focus:ring-2 focus:ring-primary-500 focus:border-transparent sm:text-sm"
             />
             {searchQuery && (
               <button
@@ -214,150 +225,152 @@ export default function BrowseBeats() {
         </div>
       </div>
 
-      {/* Main Content */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-8">
-        <div className="flex gap-4 lg:gap-8">
-          {/* Mobile Filter Toggle */}
-          <div className="lg:hidden fixed bottom-20 right-4 z-20">
-            <button
-              onClick={() => setShowMobileFilters(!showMobileFilters)}
-              className="bg-primary-600 text-white rounded-full p-4 shadow-lg hover:bg-primary-700 transition-colors"
-              aria-label="Toggle filters"
-            >
-              <svg
-                className="w-6 h-6"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"
-                />
-              </svg>
-            </button>
-          </div>
+      {/* Mobile Filter Toggle */}
+      <div className="lg:hidden fixed bottom-20 right-4 z-20">
+        <button
+          onClick={() => setShowMobileFilters(!showMobileFilters)}
+          className="bg-primary-600 text-white rounded-full p-4 shadow-lg hover:bg-primary-700 transition-colors"
+          aria-label="Toggle filters"
+        >
+          <svg
+            className="w-6 h-6"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"
+            />
+          </svg>
+        </button>
+      </div>
 
-          {/* Filter Sidebar - Desktop */}
-          <aside className="hidden lg:block w-64 shrink-0">
-            <div className="sticky top-48">
+      {/* Filter Sidebar - Mobile Overlay */}
+      {showMobileFilters && (
+        <div className="lg:hidden fixed inset-0 z-30 bg-black bg-opacity-50">
+          <div className="absolute right-0 top-0 h-full w-80 max-w-full bg-white dark:bg-gray-800 shadow-xl overflow-y-auto">
+            <div className="p-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
+              <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
+                Filters
+              </h2>
+              <button
+                onClick={() => setShowMobileFilters(false)}
+                className="text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"
+              >
+                <svg
+                  className="w-6 h-6"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M6 18L18 6M6 6l12 12"
+                  />
+                </svg>
+              </button>
+            </div>
+            <FilterSidebar onFilterChange={handleFilterChange} />
+          </div>
+        </div>
+      )}
+
+      {/* Two Column Layout - Filter Sidebar + Main Content */}
+      <div className="px-4 sm:px-6 lg:px-8 py-4 sm:py-8">
+        <div className="lg:grid lg:grid-cols-[256px_1fr] lg:gap-8">
+          {/* Filter Sidebar - Desktop (Fixed) */}
+          <aside className="hidden lg:block">
+            <div className="lg:fixed lg:top-[212px] lg:w-64 lg:max-h-[calc(100vh-212px)] lg:overflow-y-auto">
               <FilterSidebar onFilterChange={handleFilterChange} />
             </div>
           </aside>
 
-          {/* Filter Sidebar - Mobile Overlay */}
-          {showMobileFilters && (
-            <div className="lg:hidden fixed inset-0 z-30 bg-black bg-opacity-50">
-              <div className="absolute right-0 top-0 h-full w-80 max-w-full bg-white shadow-xl overflow-y-auto">
-                <div className="p-4 border-b border-gray-200 flex items-center justify-between">
-                  <h2 className="text-lg font-semibold text-gray-900">
-                    Filters
-                  </h2>
-                  <button
-                    onClick={() => setShowMobileFilters(false)}
-                    className="text-gray-500 hover:text-gray-700"
-                  >
-                    <svg
-                      className="w-6 h-6"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M6 18L18 6M6 6l12 12"
-                      />
-                    </svg>
-                  </button>
-                </div>
-                <FilterSidebar onFilterChange={handleFilterChange} />
-              </div>
-            </div>
-          )}
-
           {/* Beats Grid */}
-          <main className="flex-1 pb-32">
-            {error && (
-              <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-6">
-                {error}
-              </div>
-            )}
-
-            {loading && page === 1 ? (
-              <div className="flex items-center justify-center py-20">
-                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600"></div>
-              </div>
-            ) : (
-              <>
-                {/* Results count */}
-                <div className="mb-4 flex items-center justify-between">
-                  <p className="text-sm text-gray-600">
-                    {searchQuery &&
-                    filteredBeats.length === 0 &&
-                    beats.length > 0
-                      ? `No results for "${searchQuery}"`
-                      : filteredBeats.length === beats.length
-                        ? `${beats.length} beats found`
-                        : `${filteredBeats.length} of ${beats.length} beats`}
-                  </p>
+          <div className="max-w-7xl mx-auto w-full">
+            <main className="pb-32">
+              {error && (
+                <div className="bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-400 px-4 py-3 rounded-lg mb-6">
+                  {error}
                 </div>
+              )}
 
-                <BeatGrid
-                  beats={filteredBeats}
-                  onPlayBeat={handlePlayBeat}
-                  currentlyPlayingId={currentBeat?.id}
-                />
-
-                {/* No results message */}
-                {filteredBeats.length === 0 && beats.length > 0 && (
-                  <div className="text-center py-20">
-                    <svg
-                      className="w-16 h-16 text-gray-400 mx-auto mb-4"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M12 12h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                      />
-                    </svg>
-                    <h3 className="text-lg font-medium text-gray-900 mb-2">
-                      No beats match your filters
-                    </h3>
-                    <p className="text-gray-600">
-                      Try adjusting your filter criteria
+              {loading && page === 1 ? (
+                <div className="flex items-center justify-center py-20">
+                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600 dark:border-primary-400"></div>
+                </div>
+              ) : (
+                <>
+                  {/* Results count */}
+                  <div className="mb-4 flex items-center justify-between">
+                    <p className="text-sm text-gray-600 dark:text-gray-400">
+                      {searchQuery &&
+                      filteredBeats.length === 0 &&
+                      beats.length > 0
+                        ? `No results for "${searchQuery}"`
+                        : filteredBeats.length === beats.length
+                          ? `${beats.length} beats found`
+                          : `${filteredBeats.length} of ${beats.length} beats`}
                     </p>
                   </div>
-                )}
 
-                {/* Load More Button */}
-                {hasMore && beats.length > 0 && (
-                  <div className="mt-8 text-center">
-                    <button
-                      onClick={handleLoadMore}
-                      disabled={loading}
-                      className="px-6 py-3 bg-primary-600 text-white rounded-lg font-medium hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                    >
-                      {loading ? "Loading..." : "Load More Beats"}
-                    </button>
-                  </div>
-                )}
+                  <BeatGrid
+                    beats={filteredBeats}
+                    onPlayBeat={handlePlayBeat}
+                    currentlyPlayingId={currentBeat?.id}
+                  />
 
-                {!hasMore && beats.length > 0 && (
-                  <p className="text-center text-gray-500 mt-8 mb-8">
-                    You've reached the end!
-                  </p>
-                )}
-              </>
-            )}
-          </main>
+                  {/* No results message */}
+                  {filteredBeats.length === 0 && beats.length > 0 && (
+                    <div className="text-center py-20">
+                      <svg
+                        className="w-16 h-16 text-gray-400 dark:text-gray-600 mx-auto mb-4"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M12 12h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                        />
+                      </svg>
+                      <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
+                        No beats match your filters
+                      </h3>
+                      <p className="text-gray-600 dark:text-gray-400">
+                        Try adjusting your filter criteria
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Load More Button */}
+                  {hasMore && beats.length > 0 && (
+                    <div className="mt-8 text-center">
+                      <button
+                        onClick={handleLoadMore}
+                        disabled={loading}
+                        className="px-6 py-3 bg-primary-600 text-white rounded-lg font-medium hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                      >
+                        {loading ? "Loading..." : "Load More Beats"}
+                      </button>
+                    </div>
+                  )}
+
+                  {!hasMore && beats.length > 0 && (
+                    <p className="text-center text-gray-500 dark:text-gray-400 mt-8 mb-8">
+                      You've reached the end!
+                    </p>
+                  )}
+                </>
+              )}
+            </main>
+          </div>
         </div>
       </div>
 
