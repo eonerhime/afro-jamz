@@ -115,14 +115,16 @@ export default function FilterSidebar({ onFilterChange, initialFilters = {} }) {
     filters.maxPrice !== "";
 
   return (
-    <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+    <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
       {/* Header */}
-      <div className="p-4 border-b border-gray-200 flex items-center justify-between">
-        <h2 className="text-lg font-semibold text-gray-900">Filters</h2>
+      <div className="p-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
+        <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
+          Filters
+        </h2>
         {hasActiveFilters && (
           <button
             onClick={clearAllFilters}
-            className="text-sm text-primary-600 hover:text-primary-700 font-medium"
+            className="text-sm text-primary-600 dark:text-primary-400 hover:text-primary-700 dark:hover:text-primary-300 font-medium"
           >
             Clear All
           </button>
@@ -130,16 +132,18 @@ export default function FilterSidebar({ onFilterChange, initialFilters = {} }) {
       </div>
 
       {/* Filter Sections */}
-      <div className="divide-y divide-gray-200">
+      <div className="divide-y divide-gray-200 dark:divide-gray-700">
         {/* Genre Filter */}
         <div className="p-4">
           <button
             onClick={() => toggleSection("genre")}
             className="w-full flex items-center justify-between text-left"
           >
-            <span className="font-medium text-gray-900">Genre</span>
+            <span className="font-medium text-gray-900 dark:text-white">
+              Genre
+            </span>
             <svg
-              className={`w-5 h-5 text-gray-500 transition-transform ${
+              className={`w-5 h-5 text-gray-500 dark:text-gray-400 transition-transform ${
                 expandedSections.genre ? "rotate-180" : ""
               }`}
               fill="none"
@@ -165,9 +169,9 @@ export default function FilterSidebar({ onFilterChange, initialFilters = {} }) {
                     type="checkbox"
                     checked={filters.genres.includes(genre)}
                     onChange={() => handleGenreToggle(genre)}
-                    className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                    className="w-4 h-4 text-primary-600 border-gray-300 dark:border-gray-600 dark:bg-gray-700 rounded focus:ring-primary-500"
                   />
-                  <span className="text-sm text-gray-700 group-hover:text-gray-900">
+                  <span className="text-sm text-gray-700 dark:text-gray-300 group-hover:text-gray-900 dark:group-hover:text-white">
                     {genre}
                   </span>
                 </label>
@@ -182,9 +186,11 @@ export default function FilterSidebar({ onFilterChange, initialFilters = {} }) {
             onClick={() => toggleSection("bpm")}
             className="w-full flex items-center justify-between text-left"
           >
-            <span className="font-medium text-gray-900">BPM (Tempo)</span>
+            <span className="font-medium text-gray-900 dark:text-white">
+              BPM (Tempo)
+            </span>
             <svg
-              className={`w-5 h-5 text-gray-500 transition-transform ${
+              className={`w-5 h-5 text-gray-500 dark:text-gray-400 transition-transform ${
                 expandedSections.bpm ? "rotate-180" : ""
               }`}
               fill="none"
@@ -202,7 +208,7 @@ export default function FilterSidebar({ onFilterChange, initialFilters = {} }) {
           {expandedSections.bpm && (
             <div className="mt-3 space-y-3">
               <div>
-                <label className="block text-xs text-gray-600 mb-1">
+                <label className="block text-xs text-gray-600 dark:text-gray-400 mb-1">
                   Minimum
                 </label>
                 <input
@@ -212,11 +218,11 @@ export default function FilterSidebar({ onFilterChange, initialFilters = {} }) {
                   value={filters.minBpm}
                   onChange={(e) => handleBpmChange("minBpm", e.target.value)}
                   placeholder="60"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                 />
               </div>
               <div>
-                <label className="block text-xs text-gray-600 mb-1">
+                <label className="block text-xs text-gray-600 dark:text-gray-400 mb-1">
                   Maximum
                 </label>
                 <input
@@ -226,7 +232,7 @@ export default function FilterSidebar({ onFilterChange, initialFilters = {} }) {
                   value={filters.maxBpm}
                   onChange={(e) => handleBpmChange("maxBpm", e.target.value)}
                   placeholder="200"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                 />
               </div>
             </div>
@@ -239,9 +245,11 @@ export default function FilterSidebar({ onFilterChange, initialFilters = {} }) {
             onClick={() => toggleSection("key")}
             className="w-full flex items-center justify-between text-left"
           >
-            <span className="font-medium text-gray-900">Key</span>
+            <span className="font-medium text-gray-900 dark:text-white">
+              Key
+            </span>
             <svg
-              className={`w-5 h-5 text-gray-500 transition-transform ${
+              className={`w-5 h-5 text-gray-500 dark:text-gray-400 transition-transform ${
                 expandedSections.key ? "rotate-180" : ""
               }`}
               fill="none"
@@ -267,9 +275,9 @@ export default function FilterSidebar({ onFilterChange, initialFilters = {} }) {
                     type="checkbox"
                     checked={filters.keys.includes(key)}
                     onChange={() => handleKeyToggle(key)}
-                    className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                    className="w-4 h-4 text-primary-600 border-gray-300 dark:border-gray-600 dark:bg-gray-700 rounded focus:ring-primary-500"
                   />
-                  <span className="text-sm text-gray-700 group-hover:text-gray-900">
+                  <span className="text-sm text-gray-700 dark:text-gray-300 group-hover:text-gray-900 dark:group-hover:text-white">
                     {key}
                   </span>
                 </label>
@@ -284,11 +292,11 @@ export default function FilterSidebar({ onFilterChange, initialFilters = {} }) {
             onClick={() => toggleSection("price")}
             className="w-full flex items-center justify-between text-left"
           >
-            <span className="font-medium text-gray-900">
+            <span className="font-medium text-gray-900 dark:text-white">
               Price ({currency})
             </span>
             <svg
-              className={`w-5 h-5 text-gray-500 transition-transform ${
+              className={`w-5 h-5 text-gray-500 dark:text-gray-400 transition-transform ${
                 expandedSections.price ? "rotate-180" : ""
               }`}
               fill="none"
@@ -306,7 +314,7 @@ export default function FilterSidebar({ onFilterChange, initialFilters = {} }) {
           {expandedSections.price && (
             <div className="mt-3 space-y-3">
               <div>
-                <label className="block text-xs text-gray-600 mb-1">
+                <label className="block text-xs text-gray-600 dark:text-gray-400 mb-1">
                   Minimum
                 </label>
                 <input
@@ -318,11 +326,11 @@ export default function FilterSidebar({ onFilterChange, initialFilters = {} }) {
                     handlePriceChange("minPrice", e.target.value)
                   }
                   placeholder="0"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                 />
               </div>
               <div>
-                <label className="block text-xs text-gray-600 mb-1">
+                <label className="block text-xs text-gray-600 dark:text-gray-400 mb-1">
                   Maximum
                 </label>
                 <input
@@ -334,10 +342,10 @@ export default function FilterSidebar({ onFilterChange, initialFilters = {} }) {
                     handlePriceChange("maxPrice", e.target.value)
                   }
                   placeholder="1000"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                 />
               </div>
-              <p className="text-xs text-gray-500">
+              <p className="text-xs text-gray-500 dark:text-gray-400">
                 Prices are in {currency}. Converted from USD.
               </p>
             </div>

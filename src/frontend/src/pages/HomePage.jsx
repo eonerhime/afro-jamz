@@ -1,13 +1,14 @@
 import { Link } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
+import ThemeToggle from "../components/ThemeToggle";
 
 export default function HomePage() {
   const { isAuthenticated, user } = useAuth();
 
   return (
-    <div className="min-h-screen bg-linear-to-br from-primary-50 via-secondary-50 to-accent-50">
+    <div className="min-h-screen bg-linear-to-br from-primary-50 via-secondary-50 to-accent-50 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900">
       {/* Navigation */}
-      <nav className="bg-white/90 backdrop-blur-sm shadow-md sticky top-0 z-40">
+      <nav className="bg-white/90 dark:bg-gray-900/90 backdrop-blur-sm shadow-md sticky top-0 z-40">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between h-16 items-center">
             <div className="flex items-center gap-2">
@@ -23,7 +24,7 @@ export default function HomePage() {
             <div className="flex gap-6 items-center">
               <Link
                 to="/beats"
-                className="text-gray-700 hover:text-primary-600 font-medium transition-colors"
+                className="text-gray-700 dark:text-gray-300 hover:text-primary-600 dark:hover:text-primary-400 font-medium transition-colors"
               >
                 Browse Beats
               </Link>
@@ -35,7 +36,7 @@ export default function HomePage() {
                         ? "/producer/dashboard"
                         : "/buyer/dashboard"
                     }
-                    className="text-gray-700 hover:text-primary-600 font-medium transition-colors"
+                    className="text-gray-700 dark:text-gray-300 hover:text-primary-600 dark:hover:text-primary-400 font-medium transition-colors"
                   >
                     Dashboard
                   </Link>
@@ -44,7 +45,7 @@ export default function HomePage() {
                 <>
                   <Link
                     to="/login"
-                    className="text-gray-700 hover:text-primary-600 font-medium transition-colors"
+                    className="text-gray-700 dark:text-gray-300 hover:text-primary-600 dark:hover:text-primary-400 font-medium transition-colors"
                   >
                     Login
                   </Link>
@@ -56,6 +57,7 @@ export default function HomePage() {
                   </Link>
                 </>
               )}
+              <ThemeToggle />
             </div>
           </div>
         </div>
@@ -69,7 +71,7 @@ export default function HomePage() {
             <br />
             Meet The World
           </h2>
-          <p className="text-2xl text-gray-700 mb-10 max-w-3xl mx-auto">
+          <p className="text-2xl text-gray-700 dark:text-gray-300 mb-10 max-w-3xl mx-auto">
             The premier marketplace connecting African music producers with
             creators worldwide
           </p>
@@ -83,7 +85,7 @@ export default function HomePage() {
             {!isAuthenticated && (
               <Link
                 to="/register"
-                className="border-2 border-primary-500 text-primary-600 px-10 py-4 rounded-xl text-lg font-semibold hover:bg-primary-50 shadow-lg hover:shadow-xl transform hover:-translate-y-1 transition-all"
+                className="border-2 border-primary-500 text-primary-600 dark:text-primary-400 dark:border-primary-400 px-10 py-4 rounded-xl text-lg font-semibold hover:bg-primary-50 dark:hover:bg-gray-800 shadow-lg hover:shadow-xl transform hover:-translate-y-1 transition-all"
               >
                 🎹 Start Selling
               </Link>
@@ -93,7 +95,7 @@ export default function HomePage() {
 
         {/* Features Section */}
         <div className="grid md:grid-cols-3 gap-8 mt-24">
-          <div className="bg-white rounded-2xl p-8 shadow-lg hover:shadow-xl transition-shadow border-t-4 border-primary-500">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl p-8 shadow-lg hover:shadow-xl transition-shadow border-t-4 border-primary-500">
             <div className="w-16 h-16 bg-linear-to-br from-primary-500 to-primary-600 rounded-xl flex items-center justify-center mb-4">
               <svg
                 className="w-8 h-8 text-white"
@@ -108,16 +110,16 @@ export default function HomePage() {
                 />
               </svg>
             </div>
-            <h3 className="text-2xl font-bold text-gray-900 mb-3">
+            <h3 className="text-2xl font-bold text-gray-900 dark:text-white mb-3">
               Instant Licensing
             </h3>
-            <p className="text-gray-600">
+            <p className="text-gray-600 dark:text-gray-400">
               Clear, transparent licenses for every beat. Download immediately
               after purchase with full legal rights.
             </p>
           </div>
 
-          <div className="bg-white rounded-2xl p-8 shadow-lg hover:shadow-xl transition-shadow border-t-4 border-secondary-500">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl p-8 shadow-lg hover:shadow-xl transition-shadow border-t-4 border-secondary-500">
             <div className="w-16 h-16 bg-linear-to-br from-secondary-500 to-secondary-600 rounded-xl flex items-center justify-center mb-4">
               <svg
                 className="w-8 h-8 text-white"
@@ -131,16 +133,16 @@ export default function HomePage() {
                 />
               </svg>
             </div>
-            <h3 className="text-2xl font-bold text-gray-900 mb-3">
+            <h3 className="text-2xl font-bold text-gray-900 dark:text-white mb-3">
               Secure Payments
             </h3>
-            <p className="text-gray-600">
+            <p className="text-gray-600 dark:text-gray-400">
               Wallet system with escrow protection. Funds released after 7 days.
               Instant PayPal withdrawals for producers.
             </p>
           </div>
 
-          <div className="bg-white rounded-2xl p-8 shadow-lg hover:shadow-xl transition-shadow border-t-4 border-accent-500">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl p-8 shadow-lg hover:shadow-xl transition-shadow border-t-4 border-accent-500">
             <div className="w-16 h-16 bg-linear-to-br from-accent-500 to-accent-600 rounded-xl flex items-center justify-center mb-4">
               <svg
                 className="w-8 h-8 text-white"
@@ -150,10 +152,10 @@ export default function HomePage() {
                 <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
               </svg>
             </div>
-            <h3 className="text-2xl font-bold text-gray-900 mb-3">
+            <h3 className="text-2xl font-bold text-gray-900 dark:text-white mb-3">
               Quality Curated
             </h3>
-            <p className="text-gray-600">
+            <p className="text-gray-600 dark:text-gray-400">
               Every beat from verified African producers. Support authentic
               sounds from Afrobeats to Amapiano and beyond.
             </p>
@@ -180,10 +182,10 @@ export default function HomePage() {
 
         {/* CTA Section */}
         <div className="mt-24 text-center">
-          <h3 className="text-4xl font-bold text-gray-900 mb-6">
+          <h3 className="text-4xl font-bold text-gray-900 dark:text-white mb-6">
             Ready to Find Your Sound?
           </h3>
-          <p className="text-xl text-gray-600 mb-8 max-w-2xl mx-auto">
+          <p className="text-xl text-gray-600 dark:text-gray-400 mb-8 max-w-2xl mx-auto">
             Join thousands of creators who trust AfroJamz for authentic African
             beats
           </p>
@@ -197,7 +199,7 @@ export default function HomePage() {
       </main>
 
       {/* Footer */}
-      <footer className="bg-gray-900 text-white mt-24 py-12">
+      <footer className="bg-gray-900 dark:bg-gray-950 text-white mt-24 py-12">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
           <div className="flex items-center justify-center gap-2 mb-4">
             <img
@@ -207,7 +209,7 @@ export default function HomePage() {
             />
             <span className="text-xl font-bold">AfroJamz</span>
           </div>
-          <p className="text-gray-400">
+          <p className="text-gray-400 dark:text-gray-500">
             © 2026 AfroJamz. Empowering African music producers worldwide.
           </p>
         </div>
