@@ -39,6 +39,8 @@ export async function registerUser(req, res) {
 
         const user = {
           id: this.lastID,
+          email,
+          username: displayName || email.split("@")[0],
           role,
           auth_provider: "local",
         };
@@ -55,7 +57,16 @@ export async function registerUser(req, res) {
         // Issue token
         const token = issueJWT(user);
 
-        res.status(201).json({ token });
+        res.status(201).json({
+          token,
+          user: {
+            id: user.id,
+            email: user.email,
+            username: user.username,
+            role: user.role,
+            auth_provider: user.auth_provider,
+          },
+        });
       },
     );
   } catch (error) {
@@ -74,7 +85,16 @@ export async function loginUser(req, res) {
     if (!valid) return res.status(401).json({ error: "Invalid credentials" });
 
     const token = issueJWT(user);
-    res.json({ token });
+    res.json({
+      token,
+      user: {
+        id: user.id,
+        email: user.email,
+        username: user.username,
+        role: user.role,
+        auth_provider: user.auth_provider,
+      },
+    });
   });
 }
 
