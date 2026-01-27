@@ -11,16 +11,16 @@ export default function HomePage() {
       <nav className="bg-white/90 dark:bg-gray-900/90 backdrop-blur-sm shadow-md sticky top-0 z-40">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between h-16 items-center">
-            <div className="flex items-center gap-2">
+            <Link to="/home" className="flex items-center gap-2 group">
               <img
                 src="/afro-jamz.png"
                 alt="AfroJamz"
-                className="w-10 h-10 rounded-lg"
+                className="w-10 h-10 rounded-lg group-hover:opacity-80 transition"
               />
               <h1 className="text-2xl font-bold bg-linear-to-r from-primary-600 to-secondary-600 bg-clip-text text-transparent">
                 AfroJamz
               </h1>
-            </div>
+            </Link>
             <div className="flex gap-6 items-center">
               <Link
                 to="/beats"

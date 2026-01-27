@@ -10,6 +10,7 @@ import {
 const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:3001";
 
 export default function BeatCard({ beat, onPlay, isPlaying }) {
+  console.log("[BeatCard] beat prop:", beat);
   const [isLiked, setIsLiked] = useState(false);
   const [imageError, setImageError] = useState(false);
   const { currency } = useCurrency();
@@ -118,6 +119,7 @@ export default function BeatCard({ beat, onPlay, isPlaying }) {
         <div className="mb-2">
           <Link
             to={`/beats/${beat.id}`}
+            state={{ beat }}
             className="text-lg font-semibold text-gray-900 dark:text-white hover:text-primary-600 dark:hover:text-primary-400 line-clamp-1"
           >
             {beat.title}
@@ -214,6 +216,7 @@ export default function BeatCard({ beat, onPlay, isPlaying }) {
         <div className="flex gap-2">
           <Link
             to={`/beats/${beat.id}`}
+            state={{ beat }}
             className="flex-1 bg-primary-500 hover:bg-primary-600 text-white px-4 py-2 rounded-lg font-medium text-center transition-colors cursor-pointer"
           >
             View Licenses

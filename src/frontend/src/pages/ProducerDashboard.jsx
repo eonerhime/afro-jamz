@@ -16,16 +16,16 @@ export default function ProducerDashboard() {
       <nav className="bg-white dark:bg-gray-800 shadow-sm">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between h-16 items-center">
-            <div className="flex items-center gap-2">
+            <Link to="/home" className="flex items-center gap-2 group">
               <img
                 src="/afro-jamz.png"
-                alt="Afro Jamz"
-                className="w-10 h-10 rounded-lg"
+                alt="AfroJamz"
+                className="w-10 h-10 rounded-lg group-hover:opacity-80 transition"
               />
               <h1 className="text-2xl font-bold bg-linear-to-r from-primary-600 to-secondary-600 bg-clip-text text-transparent">
                 AfroJamz - Producer
               </h1>
-            </div>
+            </Link>
             <div className="flex items-center gap-4">
               <ThemeToggle />
               <button

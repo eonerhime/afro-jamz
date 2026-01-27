@@ -152,12 +152,16 @@ export default function BrowseBeats() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-6">
           <div className="mb-4 grid grid-cols-3 items-center gap-3">
             {/* Left: Logo + Brand */}
-            <div className="flex items-center gap-2 sm:gap-3">
-              <img src="/afro-jamz.png" alt="AfroJamz" className="h-8 w-auto" />
+            <Link to="/home" className="flex items-center gap-2 sm:gap-3 group">
+              <img
+                src="/afro-jamz.png"
+                alt="AfroJamz"
+                className="h-8 w-auto group-hover:opacity-80 transition"
+              />
               <span className="hidden sm:inline text-lg font-bold text-gray-900 dark:text-white">
                 Afro Jamz
               </span>
-            </div>
+            </Link>
             {/* Center: Title + Subtitle */}
             <div className="text-center">
               <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white">
