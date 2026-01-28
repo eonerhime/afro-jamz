@@ -7,6 +7,7 @@ import FilterSidebar from "../components/FilterSidebar";
 import ThemeToggle from "../components/ThemeToggle";
 import { useCurrency } from "../hooks/useCurrency";
 import { convertCurrency } from "../utils/currency";
+import { Link } from "react-router-dom";
 
 export default function BrowseBeats() {
   const [beats, setBeats] = useState([]);
@@ -22,6 +23,7 @@ export default function BrowseBeats() {
   const { currency } = useCurrency();
 
   useEffect(() => {
+    console.log("[BrowseBeats] useEffect: page=", page);
     fetchBeats();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [page]);
@@ -30,24 +32,30 @@ export default function BrowseBeats() {
     try {
       setLoading(true);
       setError(null);
-
+      console.log("[BrowseBeats] Fetching beats: page=", page);
       const data = await beatsAPI.getAll({
         page,
         limit: 20,
       });
-
+      console.log("[BrowseBeats] API response:", data);
       if (page === 1) {
         setBeats(data.beats || []);
+        console.log("[BrowseBeats] setBeats (first page):", data.beats || []);
       } else {
-        setBeats((prev) => [...prev, ...(data.beats || [])]);
+        setBeats((prev) => {
+          const combined = [...prev, ...(data.beats || [])];
+          console.log("[BrowseBeats] setBeats (next page):", combined);
+          return combined;
+        });
       }
-
       setHasMore((data.beats || []).length === 20);
+      console.log("[BrowseBeats] hasMore:", (data.beats || []).length === 20);
     } catch (err) {
       setError(err.response?.data?.message || "Failed to load beats");
-      console.error("Error fetching beats:", err);
+      console.error("[BrowseBeats] Error fetching beats:", err);
     } finally {
       setLoading(false);
+      console.log("[BrowseBeats] Loading finished");
     }
   };
 
@@ -86,7 +94,12 @@ export default function BrowseBeats() {
   // Filter beats based on selected filters and search query
   const applyFilters = useCallback(() => {
     let filtered = [...beats];
-
+    console.log("[BrowseBeats] Applying filters", {
+      beats,
+      filters,
+      searchQuery,
+      currency,
+    });
     // Search filter (title and producer name)
     if (searchQuery.trim() !== "") {
       const query = searchQuery.toLowerCase();
@@ -97,12 +110,10 @@ export default function BrowseBeats() {
             beat.producer_name.toLowerCase().includes(query)),
       );
     }
-
     // Genre filter
     if (filters.genres && filters.genres.length > 0) {
       filtered = filtered.filter((beat) => filters.genres.includes(beat.genre));
     }
-
     // BPM filter
     if (filters.minBpm !== "" && filters.minBpm !== undefined) {
       filtered = filtered.filter(
@@ -114,12 +125,10 @@ export default function BrowseBeats() {
         (beat) => beat.bpm <= parseInt(filters.maxBpm, 10),
       );
     }
-
     // Key filter
     if (filters.keys && filters.keys.length > 0) {
       filtered = filtered.filter((beat) => filters.keys.includes(beat.key));
     }
-
     // Price filter (convert to USD for comparison since backend stores in USD)
     if (filters.minPrice !== "" && filters.minPrice !== undefined) {
       const minPriceUSD =
@@ -133,8 +142,8 @@ export default function BrowseBeats() {
         (currency === "USD" ? 1 : convertCurrency(1, currency));
       filtered = filtered.filter((beat) => beat.min_price <= maxPriceUSD);
     }
-
     setFilteredBeats(filtered);
+    console.log("[BrowseBeats] Filtered beats:", filtered);
   }, [beats, filters, searchQuery, currency]);
 
   useEffect(() => {
