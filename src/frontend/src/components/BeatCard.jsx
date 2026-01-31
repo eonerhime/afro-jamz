@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import PropTypes from "prop-types";
 import { useCurrency } from "../hooks/useCurrency";
@@ -6,14 +6,35 @@ import {
   convertCurrency,
   formatPrice as formatCurrencyPrice,
 } from "../utils/currency";
+import { licensesAPI } from "../api/licenses";
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:3001";
 
 export default function BeatCard({ beat, onPlay, isPlaying }) {
-  console.log("[BeatCard] beat prop:", beat);
   const [isLiked, setIsLiked] = useState(false);
   const [imageError, setImageError] = useState(false);
   const { currency } = useCurrency();
+  const [error, setError] = useState(null);
+  const [licenses, setLicenses] = useState([]);
+
+  useEffect(() => {
+    console.log("[BrowseBeats] useEffect: beat=", beat);
+    fetchBeatLicenses();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [beat]);
+
+  const fetchBeatLicenses = async () => {
+    try {
+      const licenses = await licensesAPI.getByBeatId(beat.id);
+      setLicenses(licenses);
+    } catch (err) {
+      setError(err.response?.data?.message || "Failed to load beat licenses.");
+      console.error("[BrowseBeats] Error fetching beats:", err);
+      console.log("[BrowseBeats] Error response data:", error);
+    }
+  };
+
+  console.log("[BeatCard] beat prop:", beat);
 
   const handlePlayClick = (e) => {
     e.preventDefault();
@@ -119,7 +140,7 @@ export default function BeatCard({ beat, onPlay, isPlaying }) {
         <div className="mb-2">
           <Link
             to={`/beats/${beat.id}`}
-            state={{ beat }}
+            state={{ beat, beatLicenses: licenses, from: "Browse Beats" }}
             className="text-lg font-semibold text-gray-900 dark:text-white hover:text-primary-600 dark:hover:text-primary-400 line-clamp-1"
           >
             {beat.title}
@@ -216,7 +237,7 @@ export default function BeatCard({ beat, onPlay, isPlaying }) {
         <div className="flex gap-2">
           <Link
             to={`/beats/${beat.id}`}
-            state={{ beat }}
+            state={{ beat, beatLicenses: licenses, from: "Browse Beats" }}
             className="flex-1 bg-primary-500 hover:bg-primary-600 text-white px-4 py-2 rounded-lg font-medium text-center transition-colors cursor-pointer"
           >
             View Licenses

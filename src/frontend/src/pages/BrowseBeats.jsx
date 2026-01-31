@@ -1,13 +1,13 @@
-import { useState, useEffect, useCallback } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { beatsAPI } from "../api/beats";
-import BeatGrid from "../components/BeatGrid";
 import AudioPlayer from "../components/AudioPlayer";
+import BeatGrid from "../components/BeatGrid";
 import CurrencySelector from "../components/CurrencySelector";
 import FilterSidebar from "../components/FilterSidebar";
 import ThemeToggle from "../components/ThemeToggle";
 import { useCurrency } from "../hooks/useCurrency";
 import { convertCurrency } from "../utils/currency";
-import { Link } from "react-router-dom";
 
 export default function BrowseBeats() {
   const [beats, setBeats] = useState([]);
@@ -28,16 +28,18 @@ export default function BrowseBeats() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [page]);
 
+  // Fetch beats and beat licenses from API
   const fetchBeats = async () => {
     try {
       setLoading(true);
       setError(null);
-      console.log("[BrowseBeats] Fetching beats: page=", page);
       const data = await beatsAPI.getAll({
         page,
         limit: 20,
       });
+
       console.log("[BrowseBeats] API response:", data);
+
       if (page === 1) {
         setBeats(data.beats || []);
         console.log("[BrowseBeats] setBeats (first page):", data.beats || []);

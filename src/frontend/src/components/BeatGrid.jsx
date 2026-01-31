@@ -42,6 +42,7 @@ export default function BeatGrid({ beats, onPlayBeat, currentlyPlayingId }) {
   );
 }
 
+// Prop types validation
 BeatGrid.propTypes = {
   beats: PropTypes.arrayOf(
     PropTypes.shape({
@@ -52,6 +53,7 @@ BeatGrid.propTypes = {
   currentlyPlayingId: PropTypes.number,
 };
 
+// Default props
 BeatGrid.defaultProps = {
   beats: [],
   currentlyPlayingId: null,
